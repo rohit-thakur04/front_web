@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Shared form control styling, used across the template and WABA builders. */
+@utility input {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-slate-300);
+  padding: --spacing(2) --spacing(3);
+  font-size: var(--text-sm);
+  outline: none;
+
+  &:focus {
+    border-color: var(--color-slate-900);
+  }
+}
+
+/* TipTap renders into a bare contenteditable, so the editor needs explicit
+   styling for the block types the toolbar can produce. */
+.ProseMirror {
+  min-height: 280px;
+}
+.ProseMirror:focus {
+  outline: none;
+}
+.ProseMirror h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror p {
+  margin: 0.4em 0;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.4rem;
+  margin: 0.4em 0;
+}
+.ProseMirror ul {
+  list-style: disc;
+}
+.ProseMirror ol {
+  list-style: decimal;
+}
+.ProseMirror blockquote {
+  border-left: 3px solid var(--color-slate-300);
+  padding-left: 0.8rem;
+  color: var(--color-slate-600);
+  margin: 0.5em 0;
+}
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--color-slate-300);
+  margin: 1em 0;
+}
+.ProseMirror a {
+  color: var(--color-blue-600);
+  text-decoration: underline;
+}
+.ProseMirror code {
+  background: var(--color-slate-100);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9em;
+}
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Checklists: TaskList renders <ul data-type="taskList"> with checkbox labels. */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2rem;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.25rem;
+}
+
+/* Placeholder text for an empty document. */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-slate-400);
+}
+
+/* --- Dark mode (centralized) ----------------------------------------------
+   The app is authored in light colours. Toggling the `dark` class on <html>
+   (via the top-bar switch, persisted in localStorage) remaps the light surfaces,
+   borders, text and soft tints to a dark palette from this one place, so every
+   page the user visits is dark without per-component changes. White TEXT is left
+   alone (only `bg-white` backgrounds are remapped), so buttons keep white labels. */
+
+html.dark body {
+  background-color: #0b1220;
+  color: #e6edf5;
+}
+
+/* Surfaces */
+html.dark .bg-white { background-color: #171f2e !important; }
+html.dark .bg-white\/80 { background-color: rgba(23, 31, 46, 0.8) !important; }
+html.dark .bg-slate-50 { background-color: #0f1626 !important; }
+html.dark .bg-slate-100 { background-color: #1f2937 !important; }
+html.dark .bg-slate-200 { background-color: #273449 !important; }
+
+/* Hover surfaces */
+html.dark .hover\:bg-white:hover { background-color: #1f2937 !important; }
+html.dark .hover\:bg-slate-50:hover { background-color: #1c2536 !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: #273449 !important; }
+html.dark .hover\:bg-slate-200:hover { background-color: #2f3d54 !important; }
+
+/* Borders */
+html.dark .border-slate-100 { border-color: #1e2635 !important; }
+html.dark .border-slate-200 { border-color: #2a3446 !important; }
+html.dark .border-slate-300 { border-color: #3a4661 !important; }
+
+/* Neutral text */
+html.dark .text-slate-900 { color: #f1f5f9 !important; }
+html.dark .text-slate-800 { color: #e6edf5 !important; }
+html.dark .text-slate-700 { color: #d3dbe6 !important; }
+html.dark .text-slate-600 { color: #c2cbd8 !important; }
+html.dark .text-slate-500 { color: #97a3b6 !important; }
+html.dark .text-slate-400 { color: #8b98ab !important; }
+
+/* Soft tint backgrounds → translucent so they read on dark */
+html.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.16) !important; }
+html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.16) !important; }
+html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.16) !important; }
+html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.22) !important; }
+html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.16) !important; }
+html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.16) !important; }
+html.dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.16) !important; }
+html.dark .hover\:bg-blue-50:hover { background-color: rgba(59, 130, 246, 0.22) !important; }
+html.dark .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.22) !important; }
+html.dark .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.22) !important; }
+
+/* Tint text → lighter for contrast on dark */
+html.dark .text-blue-700,
+html.dark .text-blue-600 { color: #93c5fd !important; }
+html.dark .text-emerald-700,
+html.dark .text-emerald-800,
+html.dark .text-emerald-600 { color: #6ee7b7 !important; }
+html.dark .text-amber-800,
+html.dark .text-amber-600 { color: #fcd34d !important; }
+html.dark .text-rose-700,
+html.dark .text-rose-600 { color: #fca5a5 !important; }
+html.dark .text-red-700,
+html.dark .text-red-600 { color: #fca5a5 !important; }
+html.dark .text-violet-600 { color: #c4b5fd !important; }
+
+/* Buttons/marks authored as slate-900 stay high-contrast on dark. */
+html.dark .bg-slate-900 { background-color: #2563eb !important; }
+html.dark .hover\:bg-slate-800:hover { background-color: #1d4ed8 !important; }
+
+/* Native form controls default to white — force them dark. */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html.dark select,
+html.dark textarea {
+  background-color: #0f1626;
+  color: #e6edf5;
+  border-color: #2a3446;
+}
+html.dark .input {
+  background-color: #0f1626 !important;
+  border-color: #2a3446 !important;
+  color: #e6edf5 !important;
+}
+html.dark ::placeholder { color: #8b98ab; }
+
+/* Modal scrims a touch deeper on dark. */
+html.dark .bg-black\/30,
+html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
