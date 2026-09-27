@@ -98,6 +98,9 @@ export interface CatalogItem {
   kind?: "action" | "condition" | "delay";
   // True only for steps that fork into Yes/No paths (If/Else).
   branches?: boolean;
+  // True when the engine has no executor for this step yet — the picker shows it
+  // disabled rather than letting a sequence be built around a silent no-op.
+  unavailable?: boolean;
 }
 
 // One event in a workflow run's timeline, for the Activity panel.

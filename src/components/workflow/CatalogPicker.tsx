@@ -126,17 +126,31 @@ export function CatalogPicker({
               <button
                 key={it.key}
                 onClick={() => onPick(it)}
-                className="flex flex-col rounded-xl border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:shadow-sm"
+                // Unavailable steps stay visible so the roadmap is legible, but
+                // they can't be added — the engine would skip them silently.
+                disabled={it.unavailable}
+                title={it.unavailable ? "Not available yet" : undefined}
+                className={
+                  it.unavailable
+                    ? "flex cursor-not-allowed flex-col rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-left opacity-60"
+                    : "flex flex-col rounded-xl border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:shadow-sm"
+                }
               >
                 <div className="mb-1 flex items-center gap-2">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-base">
                     {it.icon}
                   </span>
                   <span className="font-semibold">{it.label}</span>
-                  {it.app && (
-                    <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                      {it.app}
+                  {it.unavailable ? (
+                    <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                      Coming soon
                     </span>
+                  ) : (
+                    it.app && (
+                      <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                        {it.app}
+                      </span>
+                    )
                   )}
                 </div>
                 <p className="text-xs text-slate-500">{it.description}</p>

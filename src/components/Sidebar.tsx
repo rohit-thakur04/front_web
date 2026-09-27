@@ -144,7 +144,7 @@ export function Sidebar({ open, onNavigate }: Props) {
       </nav>
 
       <div className="border-t border-slate-100 p-4 text-xs text-slate-400">
-        Arkquen · dry-run mode
+        Arkquen
       </div>
     </aside>
   );

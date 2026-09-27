@@ -56,7 +56,10 @@ export function StatTile({
   value,
   icon,
   tone = "blue",
-  badge = "in range",
+  // No default: a tile only shows a pill when the caller has something real to
+  // say. The old default read "in range" on every tile, implying a date filter
+  // the app does not have.
+  badge = "",
 }: {
   label: string;
   value: string | number;

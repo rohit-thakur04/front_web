@@ -60,10 +60,6 @@ export function Topbar({ onToggleSidebar }: Props) {
         )}
       </button>
 
-      <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Notifications">
-        <Icon.Bell />
-      </button>
-
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((o) => !o)}
