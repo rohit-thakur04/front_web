@@ -62,6 +62,7 @@ export default function FormBuilderPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [preview, setPreview] = useState(false);
+  const [share, setShare] = useState(false);
   const [rightTab, setRightTab] = useState<"customize" | "themes">("customize");
 
   useEffect(() => {
@@ -228,6 +229,16 @@ export default function FormBuilderPage() {
           >
             👁 Preview
           </button>
+          {/* Only a published form has a working link — an unpublished one
+              resolves to "not available", so offering the link would mislead. */}
+          {form.status === "published" && (
+            <button
+              onClick={() => setShare(true)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
+              🔗 Share
+            </button>
+          )}
           <button
             onClick={() => save(form.status === "published" ? "draft" : "published")}
             disabled={saving}
@@ -363,6 +374,10 @@ export default function FormBuilderPage() {
 
       {preview && (
         <PreviewOverlay form={form} onClose={() => setPreview(false)} />
+      )}
+
+      {share && form && (
+        <ShareOverlay form={form} onClose={() => setShare(false)} />
       )}
     </div>
   );
@@ -841,6 +856,80 @@ function PreviewOverlay({ form, onClose }: { form: Form; onClose: () => void }) 
             </p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Share overlay --------------------------------------------------------
+
+// The public link points at the WEB app, not the API: /form/<id> is a Next.js
+// page. (Short links are the opposite — those are a Go route on the API host.)
+function publicFormURL(id: string) {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/form/${id}`;
+}
+
+function ShareOverlay({ form, onClose }: { form: Form; onClose: () => void }) {
+  const [copied, setCopied] = useState("");
+  const url = publicFormURL(form._id);
+  const embed = `<iframe src="${url}" width="100%" height="600" frameborder="0" style="border:none;"></iframe>`;
+
+  async function copy(text: string, which: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {
+      // Clipboard needs a secure context; both values are selectable by hand.
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Share this form</h2>
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+            ✕
+          </button>
+        </div>
+
+        <label className="mb-1 block text-sm font-medium">Public URL</label>
+        <div className="flex gap-2">
+          <input readOnly value={url} className="input font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+          <button
+            onClick={() => copy(url, "url")}
+            className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            {copied === "url" ? "Copied ✓" : "Copy"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Anyone with this link can fill the form — no account needed. Each submission
+          becomes a contact in your pipeline and starts any workflow with a Contact
+          Created trigger.
+        </p>
+
+        <label className="mb-1 mt-4 block text-sm font-medium">Embed on your own page</label>
+        <div className="flex gap-2">
+          <textarea
+            readOnly
+            value={embed}
+            rows={3}
+            className="input font-mono text-xs"
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button
+            onClick={() => copy(embed, "embed")}
+            className="h-fit shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            {copied === "embed" ? "Copied ✓" : "Copy"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Paste this into any HTML page to show the form inline.
+        </p>
       </div>
     </div>
   );
