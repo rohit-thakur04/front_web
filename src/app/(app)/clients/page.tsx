@@ -28,6 +28,8 @@ export default function ClientsPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("client");
   const [planId, setPlanId] = useState("");
+  // Kept as a string so the field can be cleared while typing; parsed on submit.
+  const [workflowLimit, setWorkflowLimit] = useState("");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -70,7 +72,15 @@ export default function ClientsPage() {
       await api<User>("/auth/users", {
         method: "POST",
         // planId only applies to clients; the server ignores it for admins.
-        body: { name, email, password, role, planId: role === "client" ? planId : "" },
+        body: {
+          name,
+          email,
+          password,
+          role,
+          planId: role === "client" ? planId : "",
+          // 0 means unlimited; the server ignores the field for admins.
+          workflowLimit: role === "client" ? Number(workflowLimit) || 0 : 0,
+        },
       });
       setCreated({ email, password });
       setShowForm(false);
@@ -228,6 +238,24 @@ export default function ClientsPage() {
                     Create a plan first
                   </a>
                 )}
+              </p>
+            </div>
+          )}
+
+          {/* A workflow allowance is a per-client cap, independent of the plan. */}
+          {role === "client" && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Workflow limit</label>
+              <input
+                type="number"
+                min={0}
+                value={workflowLimit}
+                onChange={(e) => setWorkflowLimit(e.target.value)}
+                placeholder="0"
+                className="input"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                How many workflows this client may create. Leave at 0 for unlimited.
               </p>
             </div>
           )}

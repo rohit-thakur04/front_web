@@ -8,6 +8,8 @@ export interface User {
   name: string;
   role: Role;
   planId?: string | null;
+  // Workflow allowance for a client account. 0 or absent means unlimited.
+  workflowLimit?: number;
   // Set only on staff accounts: the client that owns this staff member.
   parentId?: string | null;
   // Feature keys a staff account is granted directly (subset of the client's own).
@@ -63,6 +65,9 @@ export function roleLevelLabel(level: number): string {
 export interface MeResponse {
   user: User;
   features: Record<string, boolean> | null;
+  // How many workflows this tenant may create. 0 means unlimited. Resolved
+  // server-side, so a staff account receives its client's allowance.
+  workflowLimit: number;
 }
 
 // --- Workflows (automation builder) --------------------------------------

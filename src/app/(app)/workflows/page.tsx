@@ -9,12 +9,18 @@ import { PageHeader } from "@/components/ui";
 import type { Workflow } from "@/lib/types";
 
 export default function WorkflowsPage() {
-  const { hasFeature } = useAuth();
+  const { hasFeature, workflowLimit } = useAuth();
   const router = useRouter();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+
+  // The list is the source of truth for usage, so the counter stays correct as
+  // workflows are created and deleted without another round trip. A limit of 0
+  // means unlimited, matching the server.
+  const capped = workflowLimit > 0;
+  const atLimit = capped && workflows.length >= workflowLimit;
 
   async function load() {
     try {
@@ -77,15 +83,32 @@ export default function WorkflowsPage() {
         title="Workflows"
         subtitle="Automate what happens when things change in your CRM."
         actions={
-          <button
-            onClick={create}
-            disabled={creating}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {creating ? "Creating…" : "+ Create Workflow"}
-          </button>
+          <div className="flex items-center gap-3">
+            {capped && (
+              <span
+                className={`text-sm ${atLimit ? "font-medium text-amber-700" : "text-slate-500"}`}
+              >
+                {workflows.length} / {workflowLimit} used
+              </span>
+            )}
+            <button
+              onClick={create}
+              disabled={creating || atLimit}
+              title={atLimit ? "Workflow limit reached" : undefined}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {creating ? "Creating…" : "+ Create Workflow"}
+            </button>
+          </div>
         }
       />
+
+      {atLimit && (
+        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          You have reached your workflow limit ({workflowLimit}). Delete one to make
+          room, or ask your administrator to increase it.
+        </p>
+      )}
 
       {error && (
         <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
@@ -101,7 +124,7 @@ export default function WorkflowsPage() {
           </p>
           <button
             onClick={create}
-            disabled={creating}
+            disabled={creating || atLimit}
             className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {creating ? "Creating…" : "+ Create Workflow"}

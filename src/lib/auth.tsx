@@ -24,6 +24,9 @@ interface AuthState {
   // hasFeature reports whether the user may use a feature. Absent keys and a null
   // map both mean "allowed", so nothing is hidden unless a plan explicitly says so.
   hasFeature: (key: string) => boolean;
+  // How many workflows this tenant may create; 0 means unlimited. Set per client
+  // by an admin, and resolved server-side so staff get their client's allowance.
+  workflowLimit: number;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -31,6 +34,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean> | null>(null);
+  const [workflowLimit, setWorkflowLimit] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -49,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setUser(me.user);
           setFeatures(me.features);
+          setWorkflowLimit(me.workflowLimit ?? 0);
         }
       } catch {
         clearToken();
@@ -75,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const me = await api<MeResponse>("/auth/me");
         setFeatures(me.features);
+        setWorkflowLimit(me.workflowLimit ?? 0);
       } catch {
         setFeatures(null);
       }
@@ -87,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearToken();
     setUser(null);
     setFeatures(null);
+    setWorkflowLimit(0);
     router.push("/login");
   }, [router]);
 
@@ -108,8 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin: user?.role === "admin",
       features,
       hasFeature,
+      workflowLimit,
     }),
-    [user, loading, login, logout, features, hasFeature],
+    [user, loading, login, logout, features, hasFeature, workflowLimit],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
