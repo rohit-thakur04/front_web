@@ -519,3 +519,19 @@ export interface WabaTemplate {
   createdAt: string;
   updatedAt: string;
 }
+
+// --- Short URLs (lead-generation attribution) -----------------------------
+
+export interface ShortURL {
+  _id: string;
+  ownerId: string;
+  // The path segment in /r/<code>. Immutable once created — links get shared.
+  code: string;
+  targetUrl: string;
+  title: string;
+  campaign: string;
+  clicks: number;
+  lastClickedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

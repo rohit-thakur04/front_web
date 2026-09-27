@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { SitesTab } from "@/components/leadgen/SitesTab";
 import { FormsTab } from "@/components/leadgen/FormsTab";
 import { PlaceholderTab } from "@/components/leadgen/PlaceholderTab";
+import { URLsTab } from "@/components/leadgen/URLsTab";
 
 // Each tab maps to a plan feature key from the Lead Generation group in the
 // catalog. A tab is shown only when the signed-in user's plan enables its
@@ -37,7 +38,6 @@ const BLURBS: Record<string, { title: string; blurb: string }> = {
   ad_launcher: { title: "Ad Launcher", blurb: "Launch and track ad campaigns without leaving the CRM." },
   ai_social: { title: "AI Social", blurb: "Draft and schedule social posts with AI assistance." },
   prospecting: { title: "Prospecting", blurb: "Find and enrich new prospects to feed your pipelines." },
-  urls: { title: "Short URLs", blurb: "Create trackable short links for campaigns and attribution." },
 };
 
 export default function LeadGenerationPage() {
@@ -97,6 +97,8 @@ export default function LeadGenerationPage() {
         <SitesTab />
       ) : current === "forms" ? (
         <FormsTab />
+      ) : current === "urls" ? (
+        <URLsTab />
       ) : current && BLURBS[current] ? (
         <PlaceholderTab title={BLURBS[current].title} blurb={BLURBS[current].blurb} />
       ) : null}
