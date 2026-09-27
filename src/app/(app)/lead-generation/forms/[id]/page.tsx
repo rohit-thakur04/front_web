@@ -466,14 +466,51 @@ function FieldPreview({
   const rowCls = `space-y-1.5${dis ? " pointer-events-none" : ""}`;
   const options = field.options ?? [];
 
+  // Constraints only apply to a live form. On the canvas every control is
+  // disabled, and a disabled control is exempt from validation anyway.
+  const req = interactive && field.required;
+
   switch (field.type) {
     case "multi_line":
-      return <textarea disabled={dis} placeholder={field.placeholder} className={`${base} min-h-20`} style={inputStyle} />;
+      return <textarea disabled={dis} required={req} placeholder={field.placeholder} className={`${base} min-h-20`} style={inputStyle} />;
     case "dob":
-      return <input disabled={dis} type="date" className={base} style={inputStyle} />;
+      return <input disabled={dis} required={req} type="date" className={base} style={inputStyle} />;
+    case "email":
+      // type="email" is validated natively by the browser.
+      return (
+        <input
+          disabled={dis}
+          required={req}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          placeholder={field.placeholder}
+          className={base}
+          style={inputStyle}
+        />
+      );
+    case "phone":
+      // type="tel" deliberately has NO native validation — phone formats vary
+      // too much worldwide — so the pattern is what actually rejects text.
+      // inputMode brings up the numeric keypad on a phone, which matters more
+      // than the validation for most people filling this in.
+      return (
+        <input
+          disabled={dis}
+          required={req}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          pattern={PHONE_PATTERN}
+          title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
+          placeholder={field.placeholder}
+          className={base}
+          style={inputStyle}
+        />
+      );
     case "single_dropdown":
       return (
-        <select disabled={dis} defaultValue="" className={base} style={inputStyle}>
+        <select disabled={dis} required={req} defaultValue="" className={base} style={inputStyle}>
           <option value="" disabled>
             {field.placeholder || "Select an option…"}
           </option>
@@ -520,9 +557,14 @@ function FieldPreview({
         </div>
       );
     default:
-      return <input disabled={dis} placeholder={field.placeholder} className={base} style={inputStyle} />;
+      return <input disabled={dis} required={req} placeholder={field.placeholder} className={base} style={inputStyle} />;
   }
 }
+
+// Permissive on purpose: a 10-digit Indian number, a +91-prefixed one and any
+// international form all have to pass. It rejects letters and punctuation soup,
+// which is all it is meant to do — the pattern attribute is implicitly anchored.
+const PHONE_PATTERN = "[+]?[0-9][0-9 ()-]{6,19}";
 
 // --- Field settings (right panel) ----------------------------------------
 
@@ -750,6 +792,17 @@ function ColorRow({
 
 function PreviewOverlay({ form, onClose }: { form: Form; onClose: () => void }) {
   const eff = effective(form.styles);
+  const [submitted, setSubmitted] = useState(false);
+
+  // A <form> is what makes the browser enforce required and pattern: a bare
+  // button outside one does nothing at all, which is why the old preview
+  // accepted anything and gave no feedback. Submission is simulated on purpose —
+  // a preview must not create a real lead.
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitted(true);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
       <div className="max-h-full w-full max-w-lg overflow-auto rounded-2xl p-8" style={{ background: eff.page }} onClick={(e) => e.stopPropagation()}>
@@ -762,21 +815,31 @@ function PreviewOverlay({ form, onClose }: { form: Form; onClose: () => void }) 
           className="p-6 shadow-lg"
           style={{ background: eff.card, color: eff.text, borderRadius: eff.radius + 8 }}
         >
-          {form.fields.map((field) => (
-            <div key={field.id} className="mb-3">
-              <label className="mb-1 block text-sm font-medium">
-                {field.label}
-                {field.required && <span className="text-rose-500"> *</span>}
-              </label>
-              <FieldPreview field={field} eff={eff} interactive />
-            </div>
-          ))}
-          <button
-            className="mt-2 w-full py-3 text-sm font-semibold uppercase tracking-wide"
-            style={{ background: eff.button, color: eff.buttonText, borderRadius: eff.radius }}
-          >
-            {form.styles.submitLabel || "Submit"}
-          </button>
+          <form onSubmit={onSubmit} noValidate={false}>
+            {form.fields.map((field) => (
+              <div key={field.id} className="mb-3">
+                <label className="mb-1 block text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-rose-500"> *</span>}
+                </label>
+                <FieldPreview field={field} eff={eff} interactive />
+              </div>
+            ))}
+            <button
+              type="submit"
+              className="mt-2 w-full py-3 text-sm font-semibold uppercase tracking-wide"
+              style={{ background: eff.button, color: eff.buttonText, borderRadius: eff.radius }}
+            >
+              {form.styles.submitLabel || "Submit"}
+            </button>
+          </form>
+
+          {submitted && (
+            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Looks good — every field passed validation. This is a preview, so
+              nothing was saved.
+            </p>
+          )}
         </div>
       </div>
     </div>
