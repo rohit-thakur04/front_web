@@ -108,7 +108,13 @@ export function MultiSelect({
       )}
 
       {open && !disabled && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+        // data-ms-panel lets the public form page pin these colours. In the
+        // builder the utility classes follow the app theme, which is correct
+        // there; on a public form the tenant's design must win instead.
+        <div
+          data-ms-panel
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+        >
           {options.length === 0 && (
             <p className="px-2 py-1.5 text-xs text-slate-400">No options yet</p>
           )}

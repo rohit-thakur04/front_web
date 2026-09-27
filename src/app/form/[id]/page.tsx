@@ -71,63 +71,118 @@ export default function PublicFormPage() {
   const s = form.styles;
   const radius = s.cornerRadius ?? 8;
 
-  if (done) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6" style={{ background: s.pageBackground || "#ffffff" }}>
-        <div
-          className="w-full max-w-lg p-8 text-center shadow-lg"
-          style={{ background: s.formCard || "#ffffff", color: s.textColor || undefined, borderRadius: radius + 8 }}
-        >
-          <p className="text-lg font-semibold">Thank you</p>
-          <p className="mt-2 text-sm opacity-70">Your response has been recorded.</p>
-        </div>
+  // Every colour gets an explicit default rather than `undefined`.
+  //
+  // This page is public: the tenant designs it, and a visitor's own OS theme must
+  // not repaint it. Leaving a colour undefined means "inherit", and the app's
+  // html.dark rules then supply near-white text on the white card and a navy
+  // background on every input — which is exactly what went wrong.
+  const c = {
+    page: s.pageBackground || "#f1f5f9",
+    card: s.formCard || "#ffffff",
+    text: s.textColor || "#0f172a",
+    inputBg: s.inputBackground || "#ffffff",
+    inputText: s.inputText || "#0f172a",
+    inputBorder: "#cbd5e1",
+    button: s.buttonBackground || "#2563eb",
+    buttonText: s.buttonText || "#ffffff",
+  };
+
+  // Scoped overrides. globals.css marks some dark rules !important, so inline
+  // styles alone can't win; scoping by data attribute keeps this page correct
+  // without touching the app's theme anywhere else.
+  const scopedCss = `
+    [data-public-form] input:not([type="checkbox"]):not([type="radio"]),
+    [data-public-form] select,
+    [data-public-form] textarea {
+      background-color: ${c.inputBg} !important;
+      color: ${c.inputText} !important;
+      border-color: ${c.inputBorder} !important;
+    }
+    [data-public-form] ::placeholder { color: #94a3b8 !important; opacity: 1; }
+    [data-public-form] [data-ms-panel] {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+    [data-public-form] [data-ms-panel] label:hover { background-color: #f8fafc !important; }
+  `;
+
+  const shell = (children: React.ReactNode) => (
+    <div
+      data-public-form
+      className="flex min-h-screen items-center justify-center px-4 py-10"
+      // colorScheme keeps browser-drawn UI — the date picker, autofill, scrollbars
+      // — light, so they match the card instead of the visitor's OS preference.
+      style={{ background: c.page, colorScheme: "light" }}
+    >
+      <style>{scopedCss}</style>
+      <div
+        className="w-full max-w-lg p-8 shadow-xl"
+        style={{ background: c.card, color: c.text, borderRadius: radius + 8 }}
+      >
+        {children}
       </div>
+    </div>
+  );
+
+  if (done) {
+    return shell(
+      <div className="py-6 text-center">
+        <div
+          className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+          style={{ background: c.button, color: c.buttonText }}
+        >
+          ✓
+        </div>
+        <p className="text-lg font-semibold">Thank you</p>
+        <p className="mt-1.5 text-sm opacity-60">Your response has been recorded.</p>
+      </div>,
     );
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center p-6" style={{ background: s.pageBackground || "#ffffff" }}>
-      <div
-        className="w-full max-w-lg p-8 shadow-lg"
-        style={{ background: s.formCard || "#ffffff", color: s.textColor || undefined, borderRadius: radius + 8 }}
-      >
-        {form.name && <h1 className="mb-5 text-xl font-semibold">{form.name}</h1>}
+  return shell(
+    <>
+      {form.name && (
+        <h1 className="mb-6 text-xl font-semibold tracking-tight">{form.name}</h1>
+      )}
 
-        <form onSubmit={submit}>
-          {form.fields.map((f) => (
-            <div key={f.id} className="mb-4">
-              <label className="mb-1 block text-sm font-medium">
-                {f.label}
-                {f.required && <span className="text-rose-500"> *</span>}
-              </label>
-              <Field
-                field={f}
-                value={values[f.id] ?? ""}
-                onChange={(v) => setValues((prev) => ({ ...prev, [f.id]: v }))}
-                styles={s}
-              />
-            </div>
-          ))}
+      <form onSubmit={submit}>
+        {form.fields.map((f) => (
+          <div key={f.id} className="mb-5">
+            <label className="mb-1.5 block text-sm font-medium">
+              {f.label}
+              {f.required && <span style={{ color: "#e11d48" }}> *</span>}
+            </label>
+            <Field
+              field={f}
+              value={values[f.id] ?? ""}
+              onChange={(v) => setValues((prev) => ({ ...prev, [f.id]: v }))}
+              styles={s}
+              colors={c}
+            />
+          </div>
+        ))}
 
-          {error && (
-            <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={sending}
-            className="mt-2 w-full py-3 text-sm font-semibold uppercase tracking-wide disabled:opacity-60"
-            style={{
-              background: s.buttonBackground || "#2563eb",
-              color: s.buttonText || "#ffffff",
-              borderRadius: radius,
-            }}
+        {error && (
+          <p
+            className="mb-4 rounded-lg px-3 py-2.5 text-sm"
+            style={{ background: "#fef2f2", color: "#b91c1c" }}
           >
-            {sending ? "Sending…" : s.submitLabel || "Submit"}
-          </button>
-        </form>
-      </div>
-    </div>
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={sending}
+          className="mt-1 w-full py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-60"
+          style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
+        >
+          {sending ? "Sending…" : s.submitLabel || "Submit"}
+        </button>
+      </form>
+    </>,
   );
 }
 
@@ -144,18 +199,24 @@ function Field({
   value,
   onChange,
   styles,
+  colors,
 }: {
   field: FormField;
   value: string;
   onChange: (v: string) => void;
   styles: FormStyles;
+  colors: { inputBg: string; inputText: string; inputBorder: string };
 }) {
+  // Colours are inline, and the border is too: border-slate-300 is one of the
+  // utilities globals.css overrides with !important under html.dark, so a class
+  // here would be repainted by the visitor's theme.
   const inputStyle = {
-    background: styles.inputBackground || undefined,
-    color: styles.inputText || undefined,
+    background: colors.inputBg,
+    color: colors.inputText,
+    border: `1px solid ${colors.inputBorder}`,
     borderRadius: styles.cornerRadius ?? 8,
   } as const;
-  const base = "w-full border border-slate-300 px-3 py-2 text-sm";
+  const base = "w-full px-3 py-2.5 text-sm outline-none";
   const options = field.options ?? [];
 
   switch (field.type) {
