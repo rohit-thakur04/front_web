@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { MultiSelect } from "@/components/leadgen/MultiSelect";
 import type { FormField, FormStyles } from "@/lib/types";
 
 // The public-facing form page. It sits outside the (app) route group on purpose:
@@ -246,8 +247,21 @@ function Field({
           ))}
         </div>
       );
-    case "checkbox":
     case "multi_dropdown": {
+      const chosen = value ? value.split(", ") : [];
+      return (
+        <MultiSelect
+          options={options}
+          value={chosen}
+          onChange={(next) => onChange(next.join(", "))}
+          required={field.required}
+          placeholder={field.placeholder || "Select options…"}
+          className={base}
+          style={inputStyle}
+        />
+      );
+    }
+    case "checkbox": {
       // Several answers collapse to one comma-joined value, because a
       // submission answer is a single string on the server.
       const selected = value ? value.split(", ") : [];

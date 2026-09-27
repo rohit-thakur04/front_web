@@ -10,6 +10,7 @@ import {
 } from "@hello-pangea/dnd";
 import { StrictModeDroppable } from "@/components/StrictModeDroppable";
 import { api } from "@/lib/api";
+import { MultiSelect } from "@/components/leadgen/MultiSelect";
 import type {
   Form,
   FormCatalog,
@@ -537,17 +538,18 @@ function FieldPreview({
         </select>
       );
     case "multi_dropdown":
-      // Native multi-select is clunky; render selectable checkboxes instead so
-      // "choose several" actually works in the live form.
+      // A real dropdown, not a checkbox list: the palette's separate Checkbox
+      // element already renders one of those, and two elements that look
+      // identical are two elements nobody can tell apart.
       return (
-        <div className={rowCls}>
-          {options.map((o, i) => (
-            <label key={i} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" disabled={dis} /> {o}
-            </label>
-          ))}
-          {options.length === 0 && <p className="text-xs text-slate-400">No options yet</p>}
-        </div>
+        <MultiSelect
+          options={options}
+          disabled={dis}
+          required={req}
+          placeholder={field.placeholder || "Select options…"}
+          className={base}
+          style={inputStyle}
+        />
       );
     case "checkbox":
       return (
