@@ -7,7 +7,30 @@ import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import type { CatalogItem, Workflow, WorkflowCatalog } from "@/lib/types";
+
+/**
+ * Suggested names for a first workflow.
+ *
+ * Deliberately only what the engine can actually do today — a contact arriving,
+ * then an email or a WhatsApp message. Suggesting a workflow the builder cannot
+ * finish would be a promise the product does not keep.
+ */
+const STARTERS: { name: string; hint: string }[] = [
+  {
+    name: "Welcome email for new leads",
+    hint: "When a contact is created, send them an introduction.",
+  },
+  {
+    name: "WhatsApp greeting on new contact",
+    hint: "Reach a new lead on the channel they are most likely to read.",
+  },
+  {
+    name: "Follow up two days later",
+    hint: "Wait, then check in if nothing has happened yet.",
+  },
+];
 
 export default function WorkflowsPage() {
   const { hasFeature, workflowLimit } = useAuth();
@@ -194,9 +217,13 @@ export default function WorkflowsPage() {
         <p className="p-6 text-sm text-slate-500">Loading…</p>
       ) : workflows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <Icon.Sparkle width={22} height={22} />
+          </span>
           <p className="text-base font-semibold">No workflows yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-            Create your first workflow to define a trigger and the steps that follow.
+            A workflow waits for something to happen — a new contact, say — and
+            then runs the steps you lay out.
           </p>
           <button
             onClick={() => setNewName("")}
@@ -205,6 +232,30 @@ export default function WorkflowsPage() {
           >
             {creating ? "Creating…" : "+ Create Workflow"}
           </button>
+
+          {/* Suggestions, not templates. Each one creates the workflow already
+              named and opens the builder — it does not pre-build steps, because
+              a workflow that appears to be finished and quietly does nothing is
+              worse than an empty one. The name is the useful part: it is the
+              thing people leave as "Untitled Workflow". */}
+          <div className="mx-auto mt-6 max-w-md border-t border-slate-200 pt-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              Or start from a common one
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {STARTERS.map((st) => (
+                <button
+                  key={st.name}
+                  onClick={() => create(st.name)}
+                  disabled={creating || atLimit}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50"
+                >
+                  <span className="font-medium">{st.name}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{st.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
