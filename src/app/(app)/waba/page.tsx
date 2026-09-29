@@ -18,12 +18,23 @@ export default function WabaListPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  // null while unknown, so the page doesn't flash a "not connected" banner
+  // before the check has come back.
+  const [connected, setConnected] = useState<boolean | null>(null);
 
   async function load() {
     try {
       setTemplates(await api<WabaTemplate[]>("/waba"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load templates");
+    }
+    try {
+      const conn = await api<{ connected: boolean }>("/waba/connection");
+      setConnected(conn.connected);
+    } catch {
+      // A failed check must not hide the templates; assume connected and let
+      // the server's own gate answer if an action is actually attempted.
+      setConnected(true);
     }
   }
 
@@ -76,21 +87,47 @@ export default function WabaListPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={refreshStatus}
-              disabled={refreshing}
-              title="Fetch the latest approval status from Meta"
+              disabled={refreshing || connected === false}
+              title={
+                connected === false
+                  ? "Connect your WhatsApp Business Account first"
+                  : "Fetch the latest approval status from Meta"
+              }
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
             >
               {refreshing ? "Refreshing…" : "↻ Refresh status"}
             </button>
-            <Link
-              href="/waba/new"
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              + New template
-            </Link>
+            {connected === false ? (
+              // A span, not a Link: a disabled anchor is still clickable, so the
+              // client would reach the form and only fail on save.
+              <span
+                title="Connect your WhatsApp Business Account first"
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white opacity-50"
+              >
+                + New template
+              </span>
+            ) : (
+              <Link
+                href="/waba/new"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                + New template
+              </Link>
+            )}
           </div>
         }
       />
+
+      {connected === false && (
+        <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <strong className="font-medium">No WhatsApp Business Account connected.</strong>{" "}
+          Templates can&apos;t be created or submitted until you connect one.{" "}
+          <Link href="/settings/app-store" className="underline hover:text-amber-900">
+            Connect WhatsApp
+          </Link>
+        </div>
+      )}
 
       {error && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

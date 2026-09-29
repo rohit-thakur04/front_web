@@ -202,7 +202,11 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                           <div
                             ref={cardsProvided.innerRef}
                             {...cardsProvided.droppableProps}
-                            className={`min-h-[60px] space-y-2 px-2 pb-2 ${
+                            // min-h is about two cards so an empty column is
+                            // still an easy drop target; max-h lets a long column
+                            // scroll inside itself, keeping the board header and
+                            // every stage header on screen.
+                            className={`min-h-[120px] max-h-[calc(100vh-18rem)] space-y-2 overflow-y-auto px-2 pb-2 ${
                               cardsSnapshot.isDraggingOver ? "bg-slate-200" : ""
                             }`}
                           >

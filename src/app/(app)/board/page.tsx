@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { BoardResponse, Pipeline } from "@/lib/types";
 import { Board } from "@/components/Board";
+import { Icon } from "@/components/icons";
 
 export default function BoardPage() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -118,11 +119,7 @@ export default function BoardPage() {
         {error && <span className="text-sm text-red-600">{error}</span>}
       </div>
 
-      {!activeId && (
-        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-          Create a pipeline to get started.
-        </div>
-      )}
+      {!activeId && <NoPipelines onCreate={createPipeline} />}
 
       {activeId && board && (
         <Board
@@ -132,6 +129,50 @@ export default function BoardPage() {
           onError={setError}
         />
       )}
+    </div>
+  );
+}
+
+/** Empty state for a workspace with no pipeline.
+ *
+ *  The previous version was one line of grey text centred in a full-height dark
+ *  area, which reads as broken rather than empty. The height is capped rather
+ *  than stretched to the viewport, and ghost columns sit behind the card so the
+ *  shape of a pipeline is legible before one exists. */
+function NoPipelines({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="relative mx-4 mb-6 overflow-hidden rounded-xl border border-dashed border-slate-300">
+      {/* Ghost columns: decoration that explains the layout, so aria-hidden. */}
+      <div aria-hidden="true" className="flex gap-3 p-4 opacity-40">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="w-72 shrink-0 rounded-xl bg-slate-100" style={{ height: 150 }}>
+            <div className="h-1 rounded-t-xl bg-slate-300" />
+            <div className="space-y-2 p-2">
+              <div className="h-8 rounded-lg bg-white" />
+              <div className="h-8 rounded-lg bg-white" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="max-w-sm rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <Icon.Board />
+          </span>
+          <p className="text-base font-semibold">No pipelines yet</p>
+          <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500">
+            A pipeline is a set of stages your contacts move through, from first
+            contact to closed.
+          </p>
+          <button
+            onClick={onCreate}
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Create pipeline
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
