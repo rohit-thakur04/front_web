@@ -33,6 +33,11 @@ const EMPTY: Metrics = {
   emailsFailed: 0,
 };
 
+/** Module scope on purpose: a useMemo callback runs during the same render pass,
+ *  before a `const` declared lower in the component body has initialised, so a
+ *  helper referenced from a memo cannot live under it. */
+const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
 /** Local-day key, so buckets line up with the user's calendar rather than UTC. */
 function dayKey(iso: string) {
   const d = new Date(iso);
@@ -143,7 +148,6 @@ export default function DashboardPage() {
     return days.map((d) => ({ label: d.label, values: index.get(d.key)! }));
   }, [logRows]);
 
-  const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
   const emailCoverage =
     metrics.contacts > 0
       ? `${Math.round((metrics.withEmail / metrics.contacts) * 100)}%`
