@@ -19,6 +19,9 @@ export interface User {
   phone?: string;
   // Deactivated accounts can't log in. Absent means active.
   disabled?: boolean;
+  // Last successful sign-in. Absent means never — the state worth noticing on
+  // the Staff page, since it usually means a pin was never passed on.
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

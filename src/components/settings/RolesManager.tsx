@@ -6,6 +6,7 @@ import {
   ROLE_LEVELS,
   roleLevelLabel,
   type FeatureGroup,
+  type StaffMember,
   type StaffPermissionCatalog,
   type StaffRole,
 } from "@/lib/types";
@@ -13,7 +14,15 @@ import {
 // Roles are reusable permission sets at a hierarchy level. A client creates roles
 // here, edits each role's permissions, then assigns a role to staff members as
 // their baseline access.
-export function RolesManager() {
+export function RolesManager({
+  staff,
+  onShowMembers,
+}: {
+  /** Passed down rather than fetched again: the Staff tab already has the list. */
+  staff: StaffMember[];
+  /** Switches to the Members tab filtered to this role. */
+  onShowMembers: (roleId: string) => void;
+}) {
   const [roles, setRoles] = useState<StaffRole[]>([]);
   const [catalog, setCatalog] = useState<StaffPermissionCatalog | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +57,21 @@ export function RolesManager() {
   }, []);
 
   const selected = roles.find((r) => r._id === selectedId) ?? null;
+
+  /**
+   * How many staff hold each role.
+   *
+   * Counted from the member list rather than asked of the server, because the
+   * Staff tab has already loaded it and a second endpoint would be a second
+   * thing that can disagree.
+   */
+  const memberCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of staff) {
+      if (m.roleId) counts.set(m.roleId, (counts.get(m.roleId) ?? 0) + 1);
+    }
+    return counts;
+  }, [staff]);
 
   // Group roles by level for the "Organization Roles" list.
   const grouped = useMemo(() => {
@@ -172,12 +196,38 @@ export function RolesManager() {
                               : "border-slate-200 bg-white hover:bg-slate-50"
                           }`}
                         >
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium">{r.name}</p>
-                            <p className="text-xs text-slate-400">
-                              {r.permissions.length} feature
-                              {r.permissions.length === 1 ? "" : "s"}
+                            {/* What the role actually grants, in words. A bare
+                                feature count says nothing about whether this is
+                                the role that can see billing. */}
+                            <p className="truncate text-xs text-slate-400">
+                              {permissionSummary(r, catalog)}
                               {r.isSystem && " · System"}
+                            </p>
+                            <p className="mt-0.5 text-xs">
+                              {(memberCounts.get(r._id) ?? 0) === 0 ? (
+                                <span className="text-slate-400">No members</span>
+                              ) : (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onShowMembers(r._id);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.stopPropagation();
+                                      onShowMembers(r._id);
+                                    }
+                                  }}
+                                  className="cursor-pointer text-blue-600 hover:underline"
+                                >
+                                  {memberCounts.get(r._id)}{" "}
+                                  {memberCounts.get(r._id) === 1 ? "member" : "members"}
+                                </span>
+                              )}
                             </p>
                           </div>
                           {!r.isSystem && (
@@ -232,6 +282,34 @@ export function RolesManager() {
       </div>
     </div>
   );
+}
+
+/**
+ * A short, readable description of what a role grants.
+ *
+ * Names the feature groups rather than listing every key: "CRM, Lead Generation
+ * +2" tells you the shape of the role at a glance, which is what the list is for.
+ * The editor beside it is where the exact keys belong.
+ */
+function permissionSummary(
+  role: StaffRole,
+  catalog: StaffPermissionCatalog | null,
+): string {
+  if (role.permissions.length === 0) return "No access";
+  if (!catalog) {
+    return `${role.permissions.length} feature${role.permissions.length === 1 ? "" : "s"}`;
+  }
+
+  const granted = new Set(role.permissions);
+  const groups = catalog.groups
+    .filter((g) => g.features.some((f) => granted.has(f.key)))
+    .map((g) => g.label);
+
+  if (groups.length === 0) {
+    return `${role.permissions.length} feature${role.permissions.length === 1 ? "" : "s"}`;
+  }
+  const shown = groups.slice(0, 2).join(", ");
+  return groups.length > 2 ? `${shown} +${groups.length - 2}` : shown;
 }
 
 function RolePermissionEditor({

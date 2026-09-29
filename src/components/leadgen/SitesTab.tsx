@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
+import { Icon } from "@/components/icons";
 import type { Funnel, FunnelType } from "@/lib/types";
 
 const TYPE_LABEL: Record<FunnelType, string> = {
@@ -61,57 +62,74 @@ export function SitesTab() {
 
   return (
     <div>
-      {/* Toolbar mirrors the reference: search, sort, view toggle, actions. */}
+      {/* Two groups, not six controls in a row: what you are looking at on the
+          left, what you can do on the right. Create is pushed past a divider so
+          the one action that makes something is not lined up flush against two
+          that are disabled. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input
-          placeholder="Search funnels…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-        />
-        <select
-          value={latestFirst ? "latest" : "oldest"}
-          onChange={(e) => setLatestFirst(e.target.value === "latest")}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-        >
-          <option value="latest">Latest to oldest</option>
-          <option value="oldest">Oldest to latest</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <div className="relative w-56">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <Icon.Search width={15} height={15} />
+            </span>
+            <input
+              placeholder="Search funnels…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 py-1.5 pl-8 pr-3 text-sm"
+            />
+          </div>
+          <select
+            value={latestFirst ? "latest" : "oldest"}
+            onChange={(e) => setLatestFirst(e.target.value === "latest")}
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            <option value="latest">Latest to oldest</option>
+            <option value="oldest">Oldest to latest</option>
+          </select>
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-slate-300">
             <button
               onClick={() => setView("list")}
-              className={`px-2 py-1.5 text-sm ${view === "list" ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}
+              title="List view"
+              className={`px-2 py-1.5 ${view === "list" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}
               aria-label="List view"
+              aria-pressed={view === "list"}
             >
-              ☰
+              <Icon.Menu width={15} height={15} />
             </button>
             <button
               onClick={() => setView("grid")}
-              className={`px-2 py-1.5 text-sm ${view === "grid" ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}
+              title="Grid view"
+              className={`px-2 py-1.5 ${view === "grid" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}
               aria-label="Grid view"
+              aria-pressed={view === "grid"}
             >
-              ▦
+              <Icon.Columns width={15} height={15} />
             </button>
           </div>
           <button
             disabled
             title="Templates are not available yet"
-            className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-400"
+            className="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-400"
           >
             Templates
           </button>
           <button
             disabled
             title="Folders are not available yet"
-            className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-400"
+            className="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-400"
           >
             New folder
           </button>
+
+          <span className="mx-1 h-6 w-px bg-slate-200" />
+
           <button
             onClick={() => setCreating(true)}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
           >
             + Create
           </button>
