@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { AutomationLog, ContactsResponse, Pipeline } from "@/lib/types";
+import type { AutomationLog, Contact, ContactsResponse, Pipeline } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { PageHeader, Section, StatTile } from "@/components/ui";
+import { AreaTrend, BarList, Meter, StackedColumns } from "@/components/charts";
 
 interface Metrics {
   pipelines: number;
@@ -32,9 +33,44 @@ const EMPTY: Metrics = {
   emailsFailed: 0,
 };
 
+/** Local-day key, so buckets line up with the user's calendar rather than UTC. */
+function dayKey(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function lastNDays(n: number) {
+  const out: { key: string; label: string }[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    out.push({
+      key: `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`,
+      label: d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    });
+  }
+  return out;
+}
+
+/** Buckets rows into the last n calendar days. Days with nothing still appear,
+ *  so a gap reads as a quiet day rather than compressing the axis. */
+function dailySeries<T extends { createdAt: string }>(rows: T[], n: number, weight: (r: T) => number) {
+  const days = lastNDays(n);
+  const index = new Map(days.map((d) => [d.key, 0]));
+  for (const r of rows) {
+    const k = dayKey(r.createdAt);
+    if (index.has(k)) index.set(k, index.get(k)! + weight(r));
+  }
+  return days.map((d) => ({ label: d.label, value: index.get(d.key)! }));
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState<Metrics>(EMPTY);
+  // The charts derive from the same two responses the tiles already use, so
+  // adding them costs no extra requests and no new server surface.
+  const [contactRows, setContactRows] = useState<Contact[]>([]);
+  const [logRows, setLogRows] = useState<AutomationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -49,6 +85,8 @@ export default function DashboardPage() {
         api<AutomationLog[]>("/automation/logs?limit=1000"),
       ]);
 
+      setContactRows(contacts.contacts ?? []);
+      setLogRows(logs);
       setMetrics({
         pipelines: pipelines.length,
         contacts: contacts.summary.totalContacts,
@@ -73,6 +111,37 @@ export default function DashboardPage() {
     }
     run();
   }, [load]);
+
+  // --- Chart series ------------------------------------------------------
+  // All derived client-side from rows already fetched. Sorted descending so the
+  // bar ramp's darkest step lands on the largest stage.
+  const byStage = useMemo(() => {
+    const totals = new Map<string, { count: number; value: number }>();
+    for (const c of contactRows) {
+      const key = c.stageName || "Unassigned";
+      const cur = totals.get(key) ?? { count: 0, value: 0 };
+      totals.set(key, { count: cur.count + 1, value: cur.value + (c.value || 0) });
+    }
+    return [...totals.entries()]
+      .map(([label, v]) => ({ label, value: v.count, sub: v.value > 0 ? inr(v.value) : undefined }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8); // Past ~7 classes a table reads better than more marks.
+  }, [contactRows]);
+
+  const newContacts = useMemo(() => dailySeries(contactRows, 30, () => 1), [contactRows]);
+
+  const automation = useMemo(() => {
+    const days = lastNDays(14);
+    const index = new Map(days.map((d) => [d.key, { sent: 0, completed: 0, failed: 0 }]));
+    for (const l of logRows) {
+      const bucket = index.get(dayKey(l.createdAt));
+      if (!bucket) continue;
+      if (l.action === "sent") bucket.sent++;
+      else if (l.action === "completed") bucket.completed++;
+      else if (l.action === "failed") bucket.failed++;
+    }
+    return days.map((d) => ({ label: d.label, values: index.get(d.key)! }));
+  }, [logRows]);
 
   const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
   const emailCoverage =
@@ -133,6 +202,50 @@ export default function DashboardPage() {
             </div>
           </Section>
 
+          <Section title="Where your contacts are">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card
+                className="lg:col-span-2"
+                title="Contacts by stage"
+                subtitle="Count per stage, with pipeline value where set"
+              >
+                <BarList data={byStage} empty="No contacts on the board yet" />
+              </Card>
+
+              <Card title="Reachability" subtitle="How many contacts you can actually contact">
+                <div className="viz space-y-5">
+                  <Meter label="Have an email" value={metrics.withEmail} total={metrics.contacts} />
+                  <Meter label="Have a phone number" value={metrics.withPhone} total={metrics.contacts} />
+                  <Meter
+                    label="In an automation"
+                    value={metrics.activeAutomations}
+                    total={metrics.contacts}
+                    hint="Contacts currently moving through an email sequence."
+                  />
+                </div>
+              </Card>
+            </div>
+          </Section>
+
+          <Section title="Activity">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card title="New contacts" subtitle="Last 30 days">
+                <AreaTrend data={newContacts} empty="No contacts added in the last 30 days" />
+              </Card>
+
+              <Card title="Automation outcomes" subtitle="Last 14 days">
+                <StackedColumns
+                  data={automation}
+                  series={[
+                    { key: "sent", label: "Sent", color: "--viz-s1" },
+                    { key: "completed", label: "Completed", color: "--viz-s2" },
+                    { key: "failed", label: "Failed", color: "--viz-s3" },
+                  ]}
+                />
+              </Card>
+            </div>
+          </Section>
+
           <Section title="Email Automation">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatTile label="Emails sent" value={metrics.emailsSent} icon="Send" tone="blue" />
@@ -161,6 +274,28 @@ export default function DashboardPage() {
           </Section>
         </>
       )}
+    </div>
+  );
+}
+
+/** Chart card. The .viz class is what scopes the validated --viz-* tokens, so
+ *  every chart must sit inside one. */
+function Card({
+  title,
+  subtitle,
+  className = "",
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`viz rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {subtitle && <p className="mt-0.5 mb-4 text-xs text-slate-500">{subtitle}</p>}
+      {children}
     </div>
   );
 }

@@ -196,3 +196,61 @@ html.dark ::placeholder { color: #8b98ab; }
 /* Modal scrims a touch deeper on dark. */
 html.dark .bg-black\/30,
 html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
+
+/* --- Chart tokens -------------------------------------------------------
+   Every value below was run through the dataviz validator against THIS app's
+   surfaces (#ffffff light, #171f2e dark — the colour html.dark gives .bg-white),
+   not a generic one: contrast and CVD results only mean anything against the
+   surface the chart actually renders on.
+
+   Charts are written against these roles, never raw hex, so the light/dark swap
+   happens in one place. The app themes by an html.dark class, so that is what
+   these key off. */
+.viz {
+  --viz-surface: #ffffff;
+  --viz-ink: #0b0b0b;
+  --viz-ink-2: #52514e;
+  --viz-muted: #898781;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
+  /* Categorical slots 1–3, in the fixed order. Never cycled, never reordered:
+     the ordering is the CVD-safety mechanism. */
+  --viz-s1: #2a78d6;
+  --viz-s2: #eb6834;
+  --viz-s3: #1baf7a;
+
+  /* Ordinal blue ramp for magnitude. Light end clears 2:1 on the surface. */
+  --viz-o1: #86b6ef;
+  --viz-o2: #5598e7;
+  --viz-o3: #2a78d6;
+  --viz-o4: #1c5cab;
+  --viz-o5: #104281;
+
+  /* Meter: fill plus a lighter step of its own ramp as the track. */
+  --viz-fill: #2a78d6;
+  --viz-track: #cde2fb;
+}
+
+html.dark .viz {
+  --viz-surface: #171f2e;
+  --viz-ink: #f1f5f9;
+  --viz-ink-2: #c3c2b7;
+  --viz-muted: #898781;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+
+  --viz-s1: #3987e5;
+  --viz-s2: #d95926;
+  --viz-s3: #199e70;
+
+  /* Re-stepped for the dark band, not an automatic flip of the light ramp. */
+  --viz-o1: #b7d3f6;
+  --viz-o2: #86b6ef;
+  --viz-o3: #5598e7;
+  --viz-o4: #2a78d6;
+  --viz-o5: #184f95;
+
+  --viz-fill: #86b6ef;
+  --viz-track: #184f95;
+}
