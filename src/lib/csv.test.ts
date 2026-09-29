@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapRows, parseCSV, parseMoney, toCSV } from "./csv";
+import { mapRows, parseCSV, parseMoney, phoneKey, toCSV } from "./csv";
 
 describe("parseCSV", () => {
   it("parses a plain grid", () => {
@@ -135,5 +135,87 @@ describe("toCSV", () => {
       ["name", "note"],
       ["Lovelace, Ada", 'say "hi"'],
     ]);
+  });
+});
+
+describe("phoneKey", () => {
+  it("collapses every spelling of one number", () => {
+    // These are the three forms a client's own exports actually contain.
+    const first = phoneKey("+91 98765 43210");
+    for (const spelling of ["09876543210", "9876543210", "(987) 654-3210"]) {
+      expect(phoneKey(spelling)).toBe(first);
+    }
+  });
+
+  it("keeps different numbers apart", () => {
+    expect(phoneKey("9876543210")).not.toBe(phoneKey("9876543211"));
+  });
+
+  it("refuses anything too short to be a number", () => {
+    // An extension or a half-filled cell would otherwise match every other
+    // short value in the file and skip real rows.
+    expect(phoneKey("1234")).toBe("");
+    expect(phoneKey("")).toBe("");
+    expect(phoneKey("x22")).toBe("");
+  });
+
+  it("agrees with the Go implementation on the seven-digit boundary", () => {
+    expect(phoneKey("1234567")).toBe("1234567");
+    expect(phoneKey("123456")).toBe("");
+  });
+});
+
+describe("mapRows duplicate handling", () => {
+  it("skips a repeated phone even when the emails differ", () => {
+    // The email-only rule let the same person in twice whenever one row left
+    // the email blank or used a second address.
+    const res = mapRows([
+      ["name", "phone", "email"],
+      ["Asha", "+91 98765 43210", "asha@work.example"],
+      ["Asha P", "09876543210", "asha@home.example"],
+    ]);
+    expect(res.rows).toHaveLength(1);
+    expect(res.duplicatesInFile).toBe(1);
+  });
+
+  it("skips a repeated email even when the phones differ", () => {
+    const res = mapRows([
+      ["name", "phone", "email"],
+      ["Asha", "9876543210", "asha@x.example"],
+      ["Asha", "9000000000", "ASHA@X.EXAMPLE"],
+    ]);
+    expect(res.rows).toHaveLength(1);
+    expect(res.duplicatesInFile).toBe(1);
+  });
+
+  it("keeps rows that share neither", () => {
+    const res = mapRows([
+      ["name", "phone", "email"],
+      ["Asha", "9876543210", "asha@x.example"],
+      ["Ben", "9000000000", "ben@x.example"],
+    ]);
+    expect(res.rows).toHaveLength(2);
+    expect(res.duplicatesInFile).toBe(0);
+  });
+
+  it("keeps rows with no email and no usable phone", () => {
+    // Nothing to match on is not the same as matching, or a column of blanks
+    // would collapse to a single contact.
+    const res = mapRows([
+      ["name", "phone", "email"],
+      ["Walk-in one", "", ""],
+      ["Walk-in two", "", ""],
+    ]);
+    expect(res.rows).toHaveLength(2);
+    expect(res.duplicatesInFile).toBe(0);
+  });
+
+  it("does not match a phone number sitting in the email column", () => {
+    const res = mapRows([
+      ["name", "phone", "email"],
+      ["A", "", "9876543210"],
+      ["B", "9876543210", ""],
+    ]);
+    expect(res.rows).toHaveLength(2);
   });
 });

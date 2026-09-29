@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   DragDropContext,
   Draggable,
@@ -18,49 +18,81 @@ import type {
 } from "@/lib/types";
 import { AutomationBadge } from "./AutomationBadge";
 import { CardDialog } from "./CardDialog";
+import { type ContactFilter, matchesFilter } from "@/lib/contactFilters";
+import { runningCardIds } from "@/lib/boardRows";
 
 interface Props {
   board: BoardResponse;
   setBoard: React.Dispatch<React.SetStateAction<BoardResponse | null>>;
   reload: () => Promise<void>;
   onError: (message: string) => void;
+  /** Automation state, owned by the page so its toolbar can filter on it too. */
+  automation: BoardAutomation | null;
+  reloadAutomation: () => void;
+  /** The toolbar's filter. Cards that fail it are hidden, stage by stage. */
+  filter: ContactFilter;
+  /** True when any part of the filter is on — see the drag note below. */
+  filtering: boolean;
 }
 
-const POLL_MS = 15_000;
-
-export function Board({ board, setBoard, reload, onError }: Props) {
-  const [automation, setAutomation] = useState<BoardAutomation | null>(null);
+export function Board({
+  board,
+  setBoard,
+  reload,
+  onError,
+  automation,
+  reloadAutomation,
+  filter,
+  filtering,
+}: Props) {
   const [editing, setEditing] = useState<{ stageId: string; card?: Card } | null>(
     null,
   );
 
   const pipelineId = board.pipeline._id;
 
-  const loadAutomation = useCallback(async () => {
-    try {
-      const data = await api<BoardAutomation>(`/automation/board/${pipelineId}`);
-      setAutomation(data);
-    } catch {
-      // The badges are supplementary; a hiccup here shouldn't disrupt the board.
-    }
-  }, [pipelineId]);
-
-  // Poll so badges advance as the cron sends, without a manual refresh.
-  useEffect(() => {
-    async function run() {
-      await loadAutomation();
-    }
-    run();
-    const id = setInterval(run, POLL_MS);
-    return () => clearInterval(id);
-  }, [loadAutomation]);
-
   const progressFor = (cardId: string, stageId: string): CardStageProgress | undefined =>
     automation?.progress.find((p) => p.cardId === cardId && p.stageId === stageId);
+
+  const running = useMemo(() => runningCardIds(automation), [automation]);
+
+  /**
+   * The cards each stage shows, after the filter.
+   *
+   * Computed once for the whole board rather than inside the render of each
+   * column, because the header count and the list below it must be the same
+   * number — deriving them separately is how those two drift.
+   */
+  const visible = useMemo(() => {
+    const byStage = new Map<string, Card[]>();
+    for (const stage of board.stages) {
+      const cards = stage.cards ?? [];
+      byStage.set(
+        stage._id,
+        filtering
+          ? cards.filter((card) =>
+              matchesFilter({ ...card, hasAutomation: running.has(card._id) }, filter),
+            )
+          : cards,
+      );
+    }
+    return byStage;
+  }, [board.stages, filter, filtering, running]);
 
   async function onDragEnd(result: DropResult) {
     const { source, destination, draggableId, type } = result;
     if (!destination) return;
+
+    /*
+     * Dragging is disabled while a filter is on, and this is the backstop.
+     *
+     * The move endpoint takes the full ordered list of card ids for the target
+     * stage. Under a filter the column shows a subset, so sending what is on
+     * screen would delete the hidden cards' positions — the drop index means
+     * nothing in the real order either. Rather than guess a mapping back, the
+     * filter has to be cleared before cards can be rearranged.
+     */
+    if (filtering) return;
 
     const samePlace =
       source.droppableId === destination.droppableId &&
@@ -111,7 +143,7 @@ export function Board({ board, setBoard, reload, onError }: Props) {
       // A cross-stage move stops one sequence and starts another, so the badges
       // are stale the moment it lands. A same-stage reorder changes nothing.
       if (source.droppableId !== destination.droppableId) {
-        loadAutomation();
+        reloadAutomation();
       }
     } catch (err) {
       setBoard(snapshot);
@@ -151,7 +183,7 @@ export function Board({ board, setBoard, reload, onError }: Props) {
     try {
       await api(`/cards/${card._id}`, { method: "DELETE" });
       await reload();
-      loadAutomation();
+      reloadAutomation();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Could not delete card");
     }
@@ -168,8 +200,15 @@ export function Board({ board, setBoard, reload, onError }: Props) {
               {...provided.droppableProps}
               className="flex flex-1 items-start gap-3 overflow-x-auto p-4"
             >
-              {board.stages.map((stage, index) => (
-                <Draggable key={stage._id} draggableId={stage._id} index={index}>
+              {board.stages.map((stage, index) => {
+                const shown = visible.get(stage._id) ?? [];
+                return (
+                <Draggable
+                  key={stage._id}
+                  draggableId={stage._id}
+                  index={index}
+                  isDragDisabled={filtering}
+                >
                   {(dragProvided, dragSnapshot) => (
                     <div
                       ref={dragProvided.innerRef}
@@ -186,8 +225,13 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                         <span className="flex-1 text-sm font-semibold">
                           {stage.name}
                         </span>
-                        <span className="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500">
-                          {stage.cards?.length ?? 0}
+                        <span
+                          className="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500"
+                          title={filtering ? "Matching cards in this stage" : undefined}
+                        >
+                          {filtering
+                            ? `${shown.length} of ${stage.cards?.length ?? 0}`
+                            : (stage.cards?.length ?? 0)}
                         </span>
                         <button
                           onClick={() => deleteStage(stage)}
@@ -198,7 +242,11 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                         </button>
                       </div>
 
-                      <Droppable droppableId={stage._id} type="CARD">
+                      <Droppable
+                        droppableId={stage._id}
+                        type="CARD"
+                        isDropDisabled={filtering}
+                      >
                         {(cardsProvided, cardsSnapshot) => (
                           <div
                             ref={cardsProvided.innerRef}
@@ -211,11 +259,17 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                               cardsSnapshot.isDraggingOver ? "bg-slate-200" : ""
                             }`}
                           >
-                            {(stage.cards ?? []).map((card, cardIndex) => (
+                            {shown.length === 0 && filtering && (
+                              <p className="px-1 py-3 text-center text-xs text-slate-400">
+                                No matches
+                              </p>
+                            )}
+                            {shown.map((card, cardIndex) => (
                               <Draggable
                                 key={card._id}
                                 draggableId={card._id}
                                 index={cardIndex}
+                                isDragDisabled={filtering}
                               >
                                 {(cardProvided, cardSnapshot) => (
                                   <div
@@ -285,7 +339,8 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                     </div>
                   )}
                 </Draggable>
-              ))}
+                );
+              })}
               {provided.placeholder}
 
               <button
@@ -307,7 +362,7 @@ export function Board({ board, setBoard, reload, onError }: Props) {
           onSaved={async () => {
             setEditing(null);
             await reload();
-            loadAutomation();
+            reloadAutomation();
           }}
           onError={onError}
         />

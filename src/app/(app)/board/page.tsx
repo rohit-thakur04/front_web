@@ -1,17 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import type { BoardResponse, Pipeline } from "@/lib/types";
+import type { BoardAutomation, BoardResponse, Pipeline, Stage } from "@/lib/types";
 import { Board } from "@/components/Board";
 import { Icon } from "@/components/icons";
+import { ImportDialog } from "@/components/ImportDialog";
+import {
+  ContactSearch,
+  FilterButton,
+  FilterChips,
+} from "@/components/ContactFilters";
+import {
+  type ContactFilter,
+  EMPTY_FILTER,
+  activeFilterCount,
+  matchesFilter,
+} from "@/lib/contactFilters";
+import { boardRows } from "@/lib/boardRows";
+import { exportContacts, exportMessage } from "@/lib/contactsExport";
+
+const POLL_MS = 15_000;
 
 export default function BoardPage() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [board, setBoard] = useState<BoardResponse | null>(null);
+  /**
+   * Automation state lives here, not in Board.
+   *
+   * The toolbar filters on "automation running", and the export writes the rows
+   * the filter left — both need it. Keeping one copy on the page means the
+   * badges on the cards and the rows in the file agree by construction.
+   */
+  const [automation, setAutomation] = useState<BoardAutomation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [filter, setFilter] = useState<ContactFilter>(EMPTY_FILTER);
+  const [importing, setImporting] = useState(false);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -45,6 +73,55 @@ export default function BoardPage() {
     run();
   }, [activeId, loadBoard]);
 
+  const loadAutomation = useCallback(async () => {
+    if (!activeId) return;
+    try {
+      setAutomation(await api<BoardAutomation>(`/automation/board/${activeId}`));
+    } catch {
+      // The badges are supplementary; a hiccup here shouldn't disrupt the board.
+    }
+  }, [activeId]);
+
+  // Poll so badges advance as the cron sends, without a manual refresh.
+  useEffect(() => {
+    async function run() {
+      await loadAutomation();
+    }
+    run();
+    const id = setInterval(run, POLL_MS);
+    return () => clearInterval(id);
+  }, [loadAutomation]);
+
+  // A pipeline's own stages, for the stage filter. The board already has them.
+  const stages: Stage[] = board?.stages ?? [];
+
+  const filtering =
+    activeFilterCount(filter) > 0 || filter.search.trim() !== "";
+
+  /** The rows the export writes: every card on the board, minus the filtered. */
+  const visibleRows = useMemo(() => {
+    if (!board) return [];
+    const rows = boardRows(board, automation);
+    return filtering ? rows.filter((r) => matchesFilter(r, filter)) : rows;
+  }, [board, automation, filter, filtering]);
+
+  // Switching pipeline drops the stage filter: the stage belonged to the old one.
+  function selectPipeline(id: string) {
+    setActiveId(id);
+    setFilter((f) => ({ ...f, stageId: "" }));
+  }
+
+  function flash(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 4000);
+  }
+
+  function runExport() {
+    if (!board || visibleRows.length === 0) return;
+    // Named after the pipeline, so a folder of exports stays legible.
+    flash(exportMessage(exportContacts(visibleRows, board.pipeline.name), filtering));
+  }
+
   async function createPipeline() {
     const name = window.prompt("Pipeline name");
     if (!name?.trim()) return;
@@ -54,7 +131,7 @@ export default function BoardPage() {
         body: { name: name.trim() },
       });
       setPipelines((prev) => [...prev, created]);
-      setActiveId(created._id);
+      selectPipeline(created._id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create pipeline");
     }
@@ -86,38 +163,101 @@ export default function BoardPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
-        <select
-          value={activeId ?? ""}
-          onChange={(e) => setActiveId(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-        >
-          {pipelines.length === 0 && <option value="">No pipelines yet</option>}
-          {pipelines.map((p) => (
-            <option key={p._id} value={p._id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+      {/* Two groups in one bar: what board you are looking at on the left, what
+          you are doing to it on the right. Delete pipeline is pushed away from
+          Import — it is the only destructive control here and should not sit
+          next to the one that adds rows. */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <select
+            value={activeId ?? ""}
+            onChange={(e) => selectPipeline(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+          >
+            {pipelines.length === 0 && <option value="">No pipelines yet</option>}
+            {pipelines.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
 
-        <button
-          onClick={createPipeline}
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + New pipeline
-        </button>
+          <button
+            onClick={createPipeline}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            + New pipeline
+          </button>
+        </div>
 
         {board && (
-          <button
-            onClick={deletePipeline}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-          >
-            Delete pipeline
-          </button>
-        )}
+          <>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <ContactSearch
+                value={filter.search}
+                onChange={(search) => setFilter((f) => ({ ...f, search }))}
+                className="w-56"
+              />
+              <FilterButton
+                filter={filter}
+                onChange={setFilter}
+                pipelines={pipelines}
+                stages={stages}
+                // The board already is one pipeline; a pipeline filter here
+                // would only be a way to empty the screen.
+                scopePipeline
+              />
+              <button
+                onClick={runExport}
+                disabled={visibleRows.length === 0}
+                title="Export the cards currently shown"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Icon.Download width={15} height={15} />
+                Export CSV
+              </button>
+              <button
+                onClick={() => setImporting(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+              >
+                <Icon.Upload width={15} height={15} />
+                Import CSV
+              </button>
+            </div>
 
-        {error && <span className="text-sm text-red-600">{error}</span>}
+            <div className="ml-4 border-l border-slate-200 pl-4">
+              <button
+                onClick={deletePipeline}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+              >
+                Delete pipeline
+              </button>
+            </div>
+          </>
+        )}
       </div>
+
+      {(error || notice || filtering) && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+          {filtering && (
+            <>
+              <FilterChips
+                filter={filter}
+                onChange={setFilter}
+                pipelines={pipelines}
+                stages={stages}
+              />
+              <span className="text-xs text-slate-500">
+                {visibleRows.length.toLocaleString()} card
+                {visibleRows.length === 1 ? "" : "s"} shown — drag is off until you
+                clear the filter.
+              </span>
+            </>
+          )}
+          {error && <span className="text-sm text-red-600">{error}</span>}
+          {notice && <span className="text-sm text-emerald-700">{notice}</span>}
+        </div>
+      )}
 
       {!activeId && <NoPipelines onCreate={createPipeline} />}
 
@@ -127,6 +267,23 @@ export default function BoardPage() {
           setBoard={setBoard}
           reload={() => loadBoard(activeId)}
           onError={setError}
+          automation={automation}
+          reloadAutomation={loadAutomation}
+          filter={filter}
+          filtering={filtering}
+        />
+      )}
+
+      {importing && board && (
+        <ImportDialog
+          pipelines={pipelines}
+          lockedPipelineId={board.pipeline._id}
+          onClose={() => setImporting(false)}
+          onDone={async () => {
+            setImporting(false);
+            await loadBoard(board.pipeline._id);
+            await loadAutomation();
+          }}
         />
       )}
     </div>

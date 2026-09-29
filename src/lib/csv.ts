@@ -87,24 +87,61 @@ export interface ParsedContact {
   phone: string;
   email: string;
   value: number;
+  /**
+   * The Stage cell as written in the file, when the file had a Stage column.
+   *
+   * A name, not an id, because that is what an export contains and what someone
+   * editing the file by hand would type. Resolving it to a stage of the target
+   * pipeline is the caller's job — only the caller knows which pipeline that is.
+   */
+  stageName?: string;
 }
 
 export interface ParseResult {
   rows: ParsedContact[];
   errors: { row: number; message: string }[];
   duplicatesInFile: number;
+  /**
+   * Whether the file had a Stage column.
+   *
+   * It changes what the stage picker means: with a Stage column it chooses where
+   * unrecognised rows land, without one it chooses where everything lands. The
+   * dialog has to say which, or one control silently means two things.
+   */
+  hasStageColumn: boolean;
+}
+
+/**
+ * phoneKey reduces a phone number to something two spellings of it can share.
+ *
+ * Digits only, then the last ten, matching handlers.phoneKey on the server
+ * exactly — the two halves of one duplicate rule, so a row counted as a
+ * duplicate in the file is the same row the server would skip. Under seven
+ * digits is not treated as a number, or half-filled cells collide with each
+ * other and drop real rows.
+ */
+export function phoneKey(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 7) return "";
+  return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
 /**
  * mapRows turns the raw grid into contact rows.
  *
  * A `name` column is required; phone/email/value are optional. Rows are deduped
- * by email within the file (the server dedupes against the pipeline separately).
+ * within the file by email OR phone — the same rule the server applies against
+ * the target pipeline. See handlers.dedupeKeys for why it is skip, not update.
  */
 export function mapRows(grid: string[][]): ParseResult {
   const errors: ParseResult["errors"] = [];
   if (grid.length === 0) {
-    return { rows: [], errors: [{ row: 0, message: "The file is empty" }], duplicatesInFile: 0 };
+    return {
+      rows: [],
+      errors: [{ row: 0, message: "The file is empty" }],
+      duplicatesInFile: 0,
+      hasStageColumn: false,
+    };
   }
 
   const header = grid[0].map((h) => h.trim().toLowerCase());
@@ -120,17 +157,19 @@ export function mapRows(grid: string[][]): ParseResult {
   const phoneIdx = col("phone", "mobile", "phone number", "contact number");
   const emailIdx = col("email", "email address", "e-mail");
   const valueIdx = col("value", "amount", "deal value", "price");
+  const stageIdx = col("stage", "stage name", "status", "column");
 
   if (nameIdx === -1) {
     return {
       rows: [],
       errors: [{ row: 1, message: 'A "name" column is required' }],
       duplicatesInFile: 0,
+      hasStageColumn: false,
     };
   }
 
   const rows: ParsedContact[] = [];
-  const seenEmails = new Set<string>();
+  const seen = new Set<string>();
   let duplicatesInFile = 0;
 
   for (let i = 1; i < grid.length; i++) {
@@ -145,24 +184,34 @@ export function mapRows(grid: string[][]): ParseResult {
     }
 
     const email = emailIdx === -1 ? "" : (cells[emailIdx] ?? "").trim();
-    const key = email.toLowerCase();
-    if (key) {
-      if (seenEmails.has(key)) {
-        duplicatesInFile++;
-        continue;
-      }
-      seenEmails.add(key);
+    const phone = phoneIdx === -1 ? "" : (cells[phoneIdx] ?? "").trim();
+
+    // Prefixed, because one set holds both kinds of key and a phone number in
+    // an email column should not match the same digits in a phone column.
+    const keys: string[] = [];
+    if (email) keys.push(`e:${email.toLowerCase()}`);
+    const pk = phoneKey(phone);
+    if (pk) keys.push(`p:${pk}`);
+
+    if (keys.some((k) => seen.has(k))) {
+      duplicatesInFile++;
+      continue;
     }
+    for (const k of keys) seen.add(k);
+
+    const stageName = stageIdx === -1 ? "" : (cells[stageIdx] ?? "").trim();
 
     rows.push({
       name,
-      phone: phoneIdx === -1 ? "" : (cells[phoneIdx] ?? "").trim(),
+      phone,
       email,
       value: valueIdx === -1 ? 0 : parseMoney((cells[valueIdx] ?? "").trim()),
+      // Omitted rather than set empty, so "no stage given" is one state.
+      ...(stageName ? { stageName } : {}),
     });
   }
 
-  return { rows, errors, duplicatesInFile };
+  return { rows, errors, duplicatesInFile, hasStageColumn: stageIdx !== -1 };
 }
 
 /**

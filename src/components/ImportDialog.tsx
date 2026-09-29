@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { mapRows, parseCSV, type ParseResult } from "@/lib/csv";
 import type { ImportResult, Pipeline, Stage } from "@/lib/types";
@@ -9,6 +9,11 @@ interface Props {
   pipelines: Pipeline[];
   onClose: () => void;
   onDone: () => void;
+  /**
+   * Fixes the target pipeline, for the board — it is already showing one, and
+   * importing into a different one from there would be a surprise.
+   */
+  lockedPipelineId?: string;
 }
 
 // Rows are uploaded in batches so we can show real progress and stay under the
@@ -25,8 +30,10 @@ interface Progress {
   failed: number;
 }
 
-export function ImportDialog({ pipelines, onClose, onDone }: Props) {
-  const [pipelineId, setPipelineId] = useState(pipelines[0]?._id ?? "");
+export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: Props) {
+  const [pipelineId, setPipelineId] = useState(
+    lockedPipelineId ?? pipelines[0]?._id ?? "",
+  );
   const [stages, setStages] = useState<Stage[]>([]);
   const [stageId, setStageId] = useState("");
 
@@ -68,6 +75,30 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
     }
   }
 
+  /**
+   * Stage names from the file, matched to this pipeline's stages.
+   *
+   * Case- and space-insensitive, because the Stage column is usually hand-edited
+   * in a spreadsheet: "qualified " and "Qualified" are the same stage to
+   * everyone except a strict comparison.
+   */
+  const stageByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of stages) map.set(s.name.trim().toLowerCase(), s._id);
+    return map;
+  }, [stages]);
+
+  /** Rows whose Stage cell names no stage of this pipeline. */
+  const unmatchedStages = useMemo(() => {
+    if (!parsed?.hasStageColumn) return [];
+    const missing = new Set<string>();
+    for (const r of parsed.rows) {
+      const key = r.stageName?.trim().toLowerCase();
+      if (key && !stageByName.has(key)) missing.add(r.stageName!.trim());
+    }
+    return [...missing];
+  }, [parsed, stageByName]);
+
   async function submit() {
     if (!parsed?.rows.length || !stageId) return;
     if (parsed.rows.length > MAX_ROWS) {
@@ -75,7 +106,13 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
       return;
     }
 
-    const rows = parsed.rows;
+    // Each row carries its own stage where the file named one this pipeline has.
+    // Everything else is left to the default stage chosen above, which is what
+    // the server falls back to.
+    const rows = parsed.rows.map((r) => {
+      const resolved = r.stageName ? stageByName.get(r.stageName.trim().toLowerCase()) : undefined;
+      return resolved ? { ...r, stageId: resolved } : r;
+    });
     const total = rows.length;
 
     setBusy(true);
@@ -138,8 +175,8 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
         {result ? (
           <div className="space-y-3">
             <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              Created {result.created} · Skipped {result.skipped} (duplicate email) ·
-              Failed {result.failed}
+              Created {result.created} · Skipped {result.skipped} (duplicate
+              email or phone) · Failed {result.failed}
             </div>
 
             {result.errors.length > 0 && (
@@ -164,21 +201,29 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium">Pipeline</label>
-                <select
-                  value={pipelineId}
-                  onChange={(e) => setPipelineId(e.target.value)}
-                  className="input"
-                >
-                  {pipelines.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                {lockedPipelineId ? (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700">
+                    {pipelines.find((p) => p._id === lockedPipelineId)?.name ?? "This pipeline"}
+                  </p>
+                ) : (
+                  <select
+                    value={pipelineId}
+                    onChange={(e) => setPipelineId(e.target.value)}
+                    className="input"
+                  >
+                    {pipelines.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium">Stage</label>
+                <label className="mb-1 block text-sm font-medium">
+                  {parsed?.hasStageColumn ? "Default stage" : "Stage"}
+                </label>
                 <select
                   value={stageId}
                   onChange={(e) => setStageId(e.target.value)}
@@ -190,6 +235,11 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
                     </option>
                   ))}
                 </select>
+                {parsed?.hasStageColumn && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Used only for rows whose Stage column is blank or unrecognised.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -206,7 +256,9 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
               />
               <p className="mt-1 text-xs text-slate-500">
                 Needs a <code>name</code> column. <code>phone</code>,{" "}
-                <code>email</code>, and <code>value</code> are optional.
+                <code>email</code>, <code>value</code> and <code>stage</code> are
+                optional. A file exported from Contacts or the board imports back
+                as-is.
               </p>
             </div>
 
@@ -230,6 +282,21 @@ export function ImportDialog({ pipelines, onClose, onDone }: Props) {
                   </div>
                 )}
               </div>
+            )}
+
+            {unmatchedStages.length > 0 && (
+              // Named explicitly rather than counted, because the usual cause is
+              // a renamed stage or a typo, and both are fixable in seconds once
+              // you can see which word did not match.
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                No stage in this pipeline is called{" "}
+                <span className="font-medium">{unmatchedStages.join(", ")}</span>.
+                Rows with those stages go to{" "}
+                <span className="font-medium">
+                  {stages.find((s) => s._id === stageId)?.name ?? "the default stage"}
+                </span>
+                .
+              </p>
             )}
 
             <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

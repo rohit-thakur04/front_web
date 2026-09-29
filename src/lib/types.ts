@@ -474,6 +474,9 @@ export interface AutomationLog {
 export interface Contact extends Card {
   pipelineName: string;
   stageName: string;
+  // Whether an email sequence is currently running for this contact. Sent per
+  // row so the Contacts page and the board can both filter on it locally.
+  hasAutomation: boolean;
 }
 
 export interface ContactSummary {

@@ -153,6 +153,44 @@ export const Icon = {
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
     </svg>
   ),
+  Filter: (p: IconProps) => (
+    <svg {...base(p)}>
+      <path d="M3 5h18l-7 8v6l-4-2v-4L3 5z" />
+    </svg>
+  ),
+  Search: (p: IconProps) => (
+    <svg {...base(p)}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  ),
+  Upload: (p: IconProps) => (
+    <svg {...base(p)}>
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+  ),
+  Close: (p: IconProps) => (
+    <svg {...base(p)}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
+  Users: (p: IconProps) => (
+    <svg {...base(p)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  Columns: (p: IconProps) => (
+    <svg {...base(p)}>
+      <rect x="3" y="4" width="5" height="16" rx="1" />
+      <rect x="10" y="4" width="5" height="11" rx="1" />
+      <rect x="17" y="4" width="4" height="7" rx="1" />
+    </svg>
+  ),
 } as const;
 
 export type IconName = keyof typeof Icon;
