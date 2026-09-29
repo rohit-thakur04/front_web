@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { AutomationLog, Contact, ContactsResponse, Pipeline } from "@/lib/types";
+import type { AutomationLog, Contact, ContactsResponse, Pipeline, Stage } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { PageHeader, Section, StatTile } from "@/components/ui";
 import { AreaTrend, BarList, Meter, StackedColumns } from "@/components/charts";
@@ -76,6 +76,13 @@ export default function DashboardPage() {
   // adding them costs no extra requests and no new server surface.
   const [contactRows, setContactRows] = useState<Contact[]>([]);
   const [logRows, setLogRows] = useState<AutomationLog[]>([]);
+  const [pipelineList, setPipelineList] = useState<Pipeline[]>([]);
+  // "" means every pipeline. Stage names repeat across pipelines, so without a
+  // filter the widget silently merges two different "Qualified" columns.
+  const [pipelineFilter, setPipelineFilter] = useState("");
+  // Stage order for the selected pipeline, so the rows read as the funnel the
+  // client built rather than sorted by size.
+  const [stageOrder, setStageOrder] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -90,6 +97,7 @@ export default function DashboardPage() {
         api<AutomationLog[]>("/automation/logs?limit=1000"),
       ]);
 
+      setPipelineList(pipelines);
       setContactRows(contacts.contacts ?? []);
       setLogRows(logs);
       setMetrics({
@@ -117,21 +125,76 @@ export default function DashboardPage() {
     run();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    // The state writes all live inside the async wrapper: setting state directly
+    // in an effect body cascades an extra render, which is what the lint rule is
+    // guarding against, and the other tabs in this app follow the same shape.
+    async function run() {
+      if (!pipelineFilter) {
+        if (!cancelled) setStageOrder([]);
+        return;
+      }
+      try {
+        const stages = await api<Stage[]>(`/pipelines/${pipelineFilter}/stages`);
+        if (!cancelled) setStageOrder(stages);
+      } catch {
+        // Without the order the rows still render, just sorted by size.
+        if (!cancelled) setStageOrder([]);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [pipelineFilter]);
+
   // --- Chart series ------------------------------------------------------
   // All derived client-side from rows already fetched. Sorted descending so the
   // bar ramp's darkest step lands on the largest stage.
   const byStage = useMemo(() => {
-    const totals = new Map<string, { count: number; value: number }>();
-    for (const c of contactRows) {
-      const key = c.stageName || "Unassigned";
-      const cur = totals.get(key) ?? { count: 0, value: 0 };
-      totals.set(key, { count: cur.count + 1, value: cur.value + (c.value || 0) });
+    const rows = pipelineFilter
+      ? contactRows.filter((c) => c.pipelineId === pipelineFilter)
+      : contactRows;
+
+    // Grouped by stage id, not name: two pipelines can both have a "Qualified"
+    // stage, and merging them would be wrong in the all-pipelines view too.
+    const totals = new Map<string, { label: string; count: number; value: number }>();
+    for (const c of rows) {
+      const key = c.stageId || "unassigned";
+      const cur = totals.get(key) ?? {
+        label: c.stageName || "Unassigned",
+        count: 0,
+        value: 0,
+      };
+      cur.count += 1;
+      cur.value += c.value || 0;
+      totals.set(key, cur);
     }
-    return [...totals.entries()]
-      .map(([label, v]) => ({ label, value: v.count, sub: v.value > 0 ? inr(v.value) : undefined }))
+
+    const out = [...totals.entries()].map(([id, v]) => ({
+      id,
+      label: v.label,
+      value: v.count,
+      sub: v.value > 0 ? inr(v.value) : undefined,
+    }));
+
+    if (pipelineFilter && stageOrder.length > 0) {
+      // Funnel order, and every stage shown — an empty stage is information,
+      // not something to hide.
+      const pos = new Map(stageOrder.map((st, i) => [st._id, i]));
+      const seeded = stageOrder.map((st) => {
+        const found = out.find((o) => o.id === st._id);
+        return found ?? { id: st._id, label: st.name, value: 0, sub: undefined };
+      });
+      const extras = out.filter((o) => !pos.has(o.id));
+      return [...seeded, ...extras];
+    }
+
+    return out
       .sort((a, b) => b.value - a.value)
       .slice(0, 8); // Past ~7 classes a table reads better than more marks.
-  }, [contactRows]);
+  }, [contactRows, pipelineFilter, stageOrder]);
 
   const newContacts = useMemo(() => dailySeries(contactRows, 30, () => 1), [contactRows]);
 
@@ -211,7 +274,26 @@ export default function DashboardPage() {
               <Card
                 className="lg:col-span-2"
                 title="Contacts by stage"
-                subtitle="Count per stage, with pipeline value where set"
+                subtitle={
+                  pipelineFilter
+                    ? "In this pipeline's own stage order"
+                    : "Across every pipeline, largest first"
+                }
+                action={
+                  <select
+                    value={pipelineFilter}
+                    onChange={(e) => setPipelineFilter(e.target.value)}
+                    aria-label="Filter by pipeline"
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
+                  >
+                    <option value="">All pipelines</option>
+                    {pipelineList.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                }
               >
                 <BarList data={byStage} empty="No contacts on the board yet" />
               </Card>
@@ -287,19 +369,27 @@ export default function DashboardPage() {
 function Card({
   title,
   subtitle,
+  action,
   className = "",
   children,
 }: {
   title: string;
   subtitle?: string;
+  /** Optional control in the header row, e.g. a filter for this chart only. */
+  action?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={`viz rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && <p className="mt-0.5 mb-4 text-xs text-slate-500">{subtitle}</p>}
-      {children}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="mt-4">{children}</div>
     </div>
   );
 }
