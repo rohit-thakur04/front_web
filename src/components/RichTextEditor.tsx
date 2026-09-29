@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { editorExtensions } from "./editorExtensions";
+import {
+  previewDocument,
+  substituteTokens,
+  unknownTokens,
+} from "@/lib/emailPreview";
 
 const CUSTOM_VALUES = [
   { label: "Contact name", token: "{{name}}" },
@@ -11,13 +16,21 @@ const CUSTOM_VALUES = [
   { label: "Pipeline name", token: "{{pipelineName}}" },
 ];
 
+/** Which of the three views is on screen. */
+type Mode = "editor" | "html" | "preview";
+
 interface Props {
   value: string;
   onChange: (html: string) => void;
+  /**
+   * The envelope fields, for the preview's header. Optional because the editor
+   * is also used where there is no subject line to show.
+   */
+  meta?: { subject?: string; fromName?: string };
 }
 
-export function RichTextEditor({ value, onChange }: Props) {
-  const [showSource, setShowSource] = useState(false);
+export function RichTextEditor({ value, onChange, meta }: Props) {
+  const [mode, setMode] = useState<Mode>("editor");
   const [source, setSource] = useState(value);
 
   const editor = useEditor({
@@ -47,22 +60,25 @@ export function RichTextEditor({ value, onChange }: Props) {
   function applySource() {
     onChange(source);
     editor?.commands.setContent(source, { emitUpdate: false });
-    setShowSource(false);
+  }
+
+  /**
+   * Hand-edited HTML is committed on the way out of the source view, whichever
+   * view is next. Leaving it to the textarea's onBlur alone loses the edit when
+   * the switch itself is what takes the focus.
+   */
+  function changeMode(next: Mode) {
+    if (mode === next) return;
+    if (mode === "html") applySource();
+    if (next === "html") setSource(editor!.getHTML());
+    setMode(next);
   }
 
   return (
     <div className="rounded-lg border border-slate-300 bg-white">
-      <Toolbar
-        editor={editor}
-        showSource={showSource}
-        onToggleSource={() => {
-          if (!showSource) setSource(editor.getHTML());
-          else applySource();
-          setShowSource((s) => !s);
-        }}
-      />
+      <Toolbar editor={editor} mode={mode} onMode={changeMode} />
 
-      {showSource ? (
+      {mode === "html" ? (
         <textarea
           value={source}
           onChange={(e) => setSource(e.target.value)}
@@ -70,6 +86,8 @@ export function RichTextEditor({ value, onChange }: Props) {
           spellCheck={false}
           className="min-h-[280px] w-full resize-y px-3 py-2 font-mono text-xs outline-none"
         />
+      ) : mode === "preview" ? (
+        <EmailPreview html={value} meta={meta} />
       ) : (
         <EditorContent editor={editor} />
       )}
@@ -77,14 +95,114 @@ export function RichTextEditor({ value, onChange }: Props) {
   );
 }
 
+/**
+ * The template as a recipient sees it.
+ *
+ * An iframe rather than a div, for two reasons that both matter. The app's CSS
+ * cannot reach into it, so what is on screen is the HTML standing on its own —
+ * which is the entire question being asked. And the HTML is whatever a tenant
+ * typed into the source view, so it is rendered under `sandbox=""`: no scripts,
+ * no same-origin access, no navigation of the page around it.
+ */
+function EmailPreview({
+  html,
+  meta,
+}: {
+  html: string;
+  meta?: { subject?: string; fromName?: string };
+}) {
+  const [narrow, setNarrow] = useState(false);
+
+  const doc = useMemo(() => previewDocument(substituteTokens(html)), [html]);
+  const unknown = useMemo(() => unknownTokens(html), [html]);
+
+  const empty = html.replace(/<[^>]*>/g, "").trim() === "";
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+        <span className="text-slate-500">
+          From{" "}
+          <span className="font-medium text-slate-700">
+            {meta?.fromName?.trim() || "—"}
+          </span>
+        </span>
+        <span className="text-slate-500">
+          Subject{" "}
+          <span className="font-medium text-slate-700">
+            {meta?.subject?.trim() || "—"}
+          </span>
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setNarrow(false)}
+            className={widthBtn(!narrow)}
+          >
+            Desktop
+          </button>
+          <button
+            type="button"
+            onClick={() => setNarrow(true)}
+            className={widthBtn(narrow)}
+          >
+            Mobile
+          </button>
+        </span>
+      </div>
+
+      {unknown.length > 0 && (
+        <p className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Sent as-is, with no value to substitute:{" "}
+          <span className="font-mono">
+            {unknown.map((t) => `{{${t}}}`).join(", ")}
+          </span>
+          . Check the spelling against the Custom values menu.
+        </p>
+      )}
+
+      {empty ? (
+        <p className="px-3 py-16 text-center text-sm text-slate-400">
+          Nothing to preview yet.
+        </p>
+      ) : (
+        <div className="bg-slate-100 p-3">
+          <iframe
+            // Keyed on the width so the frame reloads at its new size rather
+            // than reflowing content laid out for the old one.
+            key={narrow ? "narrow" : "wide"}
+            title="Email preview"
+            srcDoc={doc}
+            sandbox=""
+            className={`h-[420px] rounded border border-slate-200 bg-white ${
+              narrow ? "mx-auto w-[375px]" : "w-full"
+            }`}
+          />
+        </div>
+      )}
+
+      <p className="px-3 py-2 text-xs text-slate-500">
+        Merge fields show sample data. Email clients vary — treat this as the
+        shape of the message, not a pixel guarantee.
+      </p>
+    </div>
+  );
+}
+
+function widthBtn(active: boolean) {
+  return `rounded px-2 py-0.5 transition ${
+    active ? "bg-white font-medium text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+  }`;
+}
+
 function Toolbar({
   editor,
-  showSource,
-  onToggleSource,
+  mode,
+  onMode,
 }: {
   editor: Editor;
-  showSource: boolean;
-  onToggleSource: () => void;
+  mode: Mode;
+  onMode: (next: Mode) => void;
 }) {
   const btn = (active: boolean) =>
     `rounded px-2 py-1 text-xs transition ${
@@ -114,6 +232,12 @@ function Toolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1.5">
+      {/* Formatting acts on the editor, so it is only shown when the editor is
+          the thing on screen. Leaving it live over the source textarea or the
+          preview was the confusing part: the buttons worked, just not on what
+          the user was looking at. */}
+      {mode === "editor" && (
+        <>
       <button type="button" onClick={() => editor.chain().focus().undo().run()} className={btn(false)} title="Undo">↶</button>
       <button type="button" onClick={() => editor.chain().focus().redo().run()} className={btn(false)} title="Redo">↷</button>
       <Divider />
@@ -197,18 +321,35 @@ function Toolbar({
           </option>
         ))}
       </select>
+        </>
+      )}
 
-      <button
-        type="button"
-        onClick={onToggleSource}
-        className={`ml-auto ${btn(showSource)}`}
-        title="Toggle HTML source"
-      >
-        {showSource ? "Editor" : "HTML"}
-      </button>
+      <div className="ml-auto flex items-center gap-0.5 rounded bg-slate-100 p-0.5">
+        {MODES.map((m) => (
+          <button
+            key={m.mode}
+            type="button"
+            onClick={() => onMode(m.mode)}
+            title={m.title}
+            className={`rounded px-2 py-1 text-xs transition ${
+              mode === m.mode
+                ? "bg-white font-medium text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
+
+const MODES: { mode: Mode; label: string; title: string }[] = [
+  { mode: "editor", label: "Editor", title: "Write and format" },
+  { mode: "html", label: "HTML", title: "Edit the raw HTML" },
+  { mode: "preview", label: "Preview", title: "See it as the recipient will" },
+];
 
 function Divider() {
   return <span className="mx-1 h-4 w-px bg-slate-200" />;

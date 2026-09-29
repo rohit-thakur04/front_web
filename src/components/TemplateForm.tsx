@@ -194,7 +194,11 @@ export function TemplateForm({ stageId, template }: Props) {
 
       <div>
         <label className="mb-1 block text-sm font-medium">Content</label>
-        <RichTextEditor value={content} onChange={setContent} />
+        <RichTextEditor
+          value={content}
+          onChange={setContent}
+          meta={{ subject, fromName }}
+        />
         <p className="mt-1 text-xs text-slate-500">
           Use the Custom values menu to insert {"{{name}}"}, {"{{phone}}"},{" "}
           {"{{email}}"}, or {"{{pipelineName}}"} — they are replaced per contact

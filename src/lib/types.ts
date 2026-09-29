@@ -159,6 +159,9 @@ export interface FormField {
   placeholder: string;
   required: boolean;
   options?: string[] | null; // choice fields only
+  // Markup for a content block (see isContentField). The server sanitizes it on
+  // every save, so anything read back from the API is already safe to render.
+  html?: string;
 }
 
 export interface FormStyles {
@@ -191,6 +194,8 @@ export interface FormElement {
   icon: string;
   placeholder: string;
   hasOptions: boolean;
+  // True for an element that displays something instead of asking for it.
+  content?: boolean;
 }
 
 export interface FormElementGroup {

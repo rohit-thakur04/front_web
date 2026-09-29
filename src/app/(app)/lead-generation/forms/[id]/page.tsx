@@ -12,6 +12,7 @@ import { StrictModeDroppable } from "@/components/StrictModeDroppable";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
 import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
+import { DEFAULT_HTML_BLOCK, isContentField } from "@/lib/formFields";
 import type {
   Form,
   FormCatalog,
@@ -34,6 +35,9 @@ function makeField(el: FormElement): FormField {
     placeholder: el.placeholder,
     required: false,
     options: el.hasOptions ? ["Option 1", "Option 2"] : undefined,
+    // Seeded rather than empty: a block dropped onto the canvas has to show
+    // something, or it reads as a bug.
+    html: el.content ? DEFAULT_HTML_BLOCK : undefined,
   };
 }
 
@@ -315,6 +319,13 @@ export default function FormBuilderPage() {
                                 {field.label}
                                 {field.required && <span className="text-rose-500"> *</span>}
                               </label>
+                              {isContentField(field) && (
+                                // Named on the canvas only. The live form shows
+                                // the markup alone, with no label above it.
+                                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                                  Content
+                                </span>
+                              )}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -488,6 +499,17 @@ function FieldPreview({
   const req = interactive && field.required;
 
   switch (field.type) {
+    case "html":
+      // dangerouslySetInnerHTML is safe here on the sanitize-on-write invariant:
+      // the server runs models.SanitizeHTML on every save, so anything loaded
+      // from the API is already filtered. The only unfiltered case is the live
+      // unsaved edit, where the author and the viewer are the same person.
+      return (
+        <div
+          className={dis ? "pointer-events-none" : undefined}
+          dangerouslySetInnerHTML={{ __html: field.html ?? "" }}
+        />
+      );
     case "multi_line":
       return <textarea disabled={dis} required={req} placeholder={field.placeholder} className={`${base} min-h-20`} style={inputStyle} />;
     case "dob":
@@ -602,6 +624,9 @@ function FieldSettings({
   // allow editing it even though it's a choice field.
   const showPlaceholder =
     field.type === "single_dropdown" || (!hasOptions && field.type !== "dob");
+  // A content block asks nothing, so placeholder, required and options are all
+  // meaningless for it. Showing them greyed out would still invite the question.
+  const isContent = isContentField(field);
 
   return (
     <div>
@@ -614,11 +639,38 @@ function FieldSettings({
 
       <div className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium">Label</label>
+          <label className="mb-1 block text-sm font-medium">
+            {isContent ? "Block name" : "Label"}
+          </label>
           <input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />
+          {isContent && (
+            <p className="mt-1 text-xs text-slate-500">
+              Shown on the canvas only, so you can tell your blocks apart. It is
+              not rendered on the live form.
+            </p>
+          )}
         </div>
 
-        {showPlaceholder && (
+        {isContent && (
+          <div>
+            <label className="mb-1 block text-sm font-medium">HTML</label>
+            <textarea
+              value={field.html ?? ""}
+              onChange={(e) => onChange({ html: e.target.value })}
+              spellCheck={false}
+              rows={10}
+              className="w-full resize-y rounded-lg border border-slate-300 px-2 py-1.5 font-mono text-xs outline-none focus:border-blue-400"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Text, headings, lists, links, images and tables are kept. Scripts,
+              styles, iframes and extra form inputs are stripped when you save —
+              this HTML is served on a public page, so it has to be safe to show
+              to a stranger.
+            </p>
+          </div>
+        )}
+
+        {!isContent && showPlaceholder && (
           <div>
             <label className="mb-1 block text-sm font-medium">Placeholder</label>
             <input
@@ -629,14 +681,16 @@ function FieldSettings({
           </div>
         )}
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={field.required}
-            onChange={(e) => onChange({ required: e.target.checked })}
-          />
-          Required field
-        </label>
+        {!isContent && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(e) => onChange({ required: e.target.checked })}
+            />
+            Required field
+          </label>
+        )}
 
         {hasOptions && (
           <div>
@@ -837,10 +891,12 @@ function PreviewOverlay({ form, onClose }: { form: Form; onClose: () => void }) 
           <form onSubmit={onSubmit} noValidate={false}>
             {form.fields.map((field) => (
               <div key={field.id} className="mb-3">
-                <label className="mb-1 block text-sm font-medium">
-                  {field.label}
-                  {field.required && <span className="text-rose-500"> *</span>}
-                </label>
+                {!isContentField(field) && (
+                  <label className="mb-1 block text-sm font-medium">
+                    {field.label}
+                    {field.required && <span className="text-rose-500"> *</span>}
+                  </label>
+                )}
                 <FieldPreview field={field} eff={eff} interactive />
               </div>
             ))}

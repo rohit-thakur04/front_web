@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
 import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
+import { isContentField } from "@/lib/formFields";
 import type { FormField, FormStyles } from "@/lib/types";
 
 // The public-facing form page. It sits outside the (app) route group on purpose:
@@ -146,21 +147,34 @@ export default function PublicFormPage() {
       )}
 
       <form onSubmit={submit}>
-        {form.fields.map((f) => (
-          <div key={f.id} className="mb-5">
-            <label className="mb-1.5 block text-sm font-medium">
-              {f.label}
-              {f.required && <span style={{ color: "#e11d48" }}> *</span>}
-            </label>
-            <Field
-              field={f}
-              value={values[f.id] ?? ""}
-              onChange={(v) => setValues((prev) => ({ ...prev, [f.id]: v }))}
-              styles={s}
-              colors={c}
+        {form.fields.map((f) =>
+          // A content block is markup, not a question: no label, no asterisk,
+          // and nothing added to `values`, so it never reaches the submission.
+          isContentField(f) ? (
+            <div
+              key={f.id}
+              className="mb-5"
+              // Safe on the sanitize-on-write invariant: the server runs
+              // SanitizeHTML on every save, so what the API serves here has
+              // already had scripts, styles and iframes removed.
+              dangerouslySetInnerHTML={{ __html: f.html ?? "" }}
             />
-          </div>
-        ))}
+          ) : (
+            <div key={f.id} className="mb-5">
+              <label className="mb-1.5 block text-sm font-medium">
+                {f.label}
+                {f.required && <span style={{ color: "#e11d48" }}> *</span>}
+              </label>
+              <Field
+                field={f}
+                value={values[f.id] ?? ""}
+                onChange={(v) => setValues((prev) => ({ ...prev, [f.id]: v }))}
+                styles={s}
+                colors={c}
+              />
+            </div>
+          ),
+        )}
 
         {error && (
           <p
