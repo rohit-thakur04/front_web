@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
+import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
 import type { FormField, FormStyles } from "@/lib/types";
 
 // The public-facing form page. It sits outside the (app) route group on purpose:
@@ -18,9 +19,6 @@ interface PublicForm {
   theme: string;
 }
 
-// Same rule the builder applies and the server enforces. Permissive by design:
-// Indian, +91-prefixed and international numbers all pass.
-const PHONE_PATTERN = "[+]?[0-9][0-9 ()-]{6,19}";
 
 export default function PublicFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -266,7 +264,9 @@ function Field({
           title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
           required={field.required}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          // Filtered here rather than only on submit, so a stranger filling this
+          // in sees immediately that letters aren't accepted.
+          onChange={(e) => onChange(sanitizePhoneInput(e.target.value))}
           placeholder={field.placeholder}
           className={base}
           style={inputStyle}

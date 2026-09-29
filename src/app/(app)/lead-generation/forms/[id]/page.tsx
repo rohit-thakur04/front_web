@@ -11,6 +11,7 @@ import {
 import { StrictModeDroppable } from "@/components/StrictModeDroppable";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
+import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
 import type {
   Form,
   FormCatalog,
@@ -506,10 +507,10 @@ function FieldPreview({
         />
       );
     case "phone":
-      // type="tel" deliberately has NO native validation — phone formats vary
-      // too much worldwide — so the pattern is what actually rejects text.
-      // inputMode brings up the numeric keypad on a phone, which matters more
-      // than the validation for most people filling this in.
+      // type="tel" has NO native validation — phone formats vary too much
+      // worldwide — so onInput filters the keystroke and pattern is the backstop
+      // for paste and autofill. inputMode brings up the numeric keypad, which
+      // matters more than either for most people filling this in.
       return (
         <input
           disabled={dis}
@@ -517,6 +518,11 @@ function FieldPreview({
           type="tel"
           inputMode="tel"
           autoComplete="tel"
+          onInput={(e) => {
+            const el = e.currentTarget;
+            const clean = sanitizePhoneInput(el.value);
+            if (clean !== el.value) el.value = clean;
+          }}
           pattern={PHONE_PATTERN}
           title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
           placeholder={field.placeholder}
@@ -578,10 +584,6 @@ function FieldPreview({
   }
 }
 
-// Permissive on purpose: a 10-digit Indian number, a +91-prefixed one and any
-// international form all have to pass. It rejects letters and punctuation soup,
-// which is all it is meant to do — the pattern attribute is implicitly anchored.
-const PHONE_PATTERN = "[+]?[0-9][0-9 ()-]{6,19}";
 
 // --- Field settings (right panel) ----------------------------------------
 
