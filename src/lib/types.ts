@@ -86,12 +86,16 @@ export interface Workflow {
   _id: string;
   ownerId: string;
   name: string;
-  status: "draft" | "published";
+  // paused = has been published and is temporarily off; draft has never run.
+  status: "draft" | "published" | "paused";
   trigger: string;
   triggerConfig: Record<string, unknown>;
   steps: WorkflowStep[];
   createdAt: string;
   updatedAt: string;
+  // Derived server-side for the list view; absent on a workflow that never ran.
+  lastRunAt?: string | null;
+  runCount?: number;
 }
 
 export interface CatalogItem {
