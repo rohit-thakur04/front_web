@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import type { Funnel, FunnelType } from "@/lib/types";
 
 const TYPE_LABEL: Record<FunnelType, string> = {
@@ -181,18 +182,13 @@ export function SitesTab() {
                     {new Date(f.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Link
-                      href={`/lead-generation/sites/${f._id}`}
-                      className="mr-3 text-xs text-blue-600 hover:underline"
-                    >
-                      Open
-                    </Link>
-                    <button
-                      onClick={() => remove(f)}
-                      className="text-xs text-slate-500 hover:text-rose-600"
-                    >
-                      Delete
-                    </button>
+                    <RowActions>
+                      {/* "Open" navigated in-app to the editor — the same action
+                          Workflows calls Edit — so it wears the pencil. The
+                          external-link icon is reserved for genuine new tabs. */}
+                      <RowAction action="edit" label="Edit" href={`/lead-generation/sites/${f._id}`} />
+                      <RowAction action="delete" label="Delete" onClick={() => remove(f)} />
+                    </RowActions>
                   </td>
                 </tr>
               ))}

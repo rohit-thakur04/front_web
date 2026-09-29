@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import type { ContactsResponse, Pipeline } from "@/lib/types";
 import { ImportDialog } from "@/components/ImportDialog";
@@ -191,18 +192,10 @@ export default function ContactsPage() {
                   {new Date(c.createdAt).toLocaleDateString()}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">
-                  <button
-                    onClick={() => setEditing(c)}
-                    className="text-xs text-slate-500 hover:text-slate-900"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => remove(c._id, c.name)}
-                    className="ml-2 text-xs text-slate-500 hover:text-red-600"
-                  >
-                    Delete
-                  </button>
+                  <RowActions>
+                    <RowAction action="edit" label="Edit" onClick={() => setEditing(c)} />
+                    <RowAction action="delete" label="Delete" onClick={() => remove(c._id, c.name)} />
+                  </RowActions>
                 </td>
               </tr>
             ))}

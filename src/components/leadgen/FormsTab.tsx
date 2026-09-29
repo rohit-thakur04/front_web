@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import type { Form } from "@/lib/types";
 
 export function FormsTab() {
@@ -203,15 +204,10 @@ export function FormsTab() {
                         {new Date(f.updatedAt).toLocaleDateString()}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Link
-                          href={`/lead-generation/forms/${f._id}`}
-                          className="mr-3 text-xs text-blue-600 hover:underline"
-                        >
-                          Open
-                        </Link>
-                        <button onClick={() => remove(f)} className="text-xs text-slate-500 hover:text-rose-600">
-                          Delete
-                        </button>
+                        <RowActions>
+                          <RowAction action="edit" label="Edit" href={`/lead-generation/forms/${f._id}`} />
+                          <RowAction action="delete" label="Delete" onClick={() => remove(f)} />
+                        </RowActions>
                       </td>
                     </tr>
                   ))}
@@ -233,9 +229,11 @@ export function FormsTab() {
                   <p className="text-xs text-slate-500">
                     {f.status === "published" ? "Published" : "Draft"} · {f.fields?.length ?? 0} fields
                   </p>
-                  <button onClick={() => remove(f)} className="mt-2 text-xs text-slate-500 hover:text-rose-600">
-                    Delete
-                  </button>
+                  <div className="mt-2">
+                    <RowActions>
+                      <RowAction action="delete" label="Delete" onClick={() => remove(f)} />
+                    </RowActions>
+                  </div>
                 </div>
               ))}
             </div>

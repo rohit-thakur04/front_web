@@ -8,6 +8,7 @@ import {
 } from "@hello-pangea/dnd";
 import { StrictModeDroppable as Droppable } from "./StrictModeDroppable";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import type {
   BoardAutomation,
   BoardResponse,
@@ -229,20 +230,21 @@ export function Board({ board, setBoard, reload, onError }: Props) {
                                       <span className="flex-1 font-medium">
                                         {card.name}
                                       </span>
-                                      <button
-                                        onClick={() =>
-                                          setEditing({ stageId: stage._id, card })
-                                        }
-                                        className="text-xs text-slate-400 hover:text-slate-900"
-                                      >
-                                        edit
-                                      </button>
-                                      <button
-                                        onClick={() => deleteCard(card)}
-                                        className="text-xs text-slate-400 hover:text-red-600"
-                                      >
-                                        ×
-                                      </button>
+                                      <RowActions>
+                                        <RowAction
+                                          action="edit"
+                                          label="Edit"
+                                          onClick={() => setEditing({ stageId: stage._id, card })}
+                                        />
+                                        {/* Was a bare "×", which reads as "close"
+                                            rather than "remove". A trash icon says
+                                            what it does. */}
+                                        <RowAction
+                                          action="delete"
+                                          label="Delete"
+                                          onClick={() => deleteCard(card)}
+                                        />
+                                      </RowActions>
                                     </div>
 
                                     {card.email && (

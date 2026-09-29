@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, apiBase } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import type { ShortURL } from "@/lib/types";
 
 // The redirect lives on the API host, not the web host — /r/:code is served by
@@ -194,18 +195,17 @@ export function URLsTab() {
                   <td className="px-4 py-3 text-slate-600">{l.campaign || "—"}</td>
                   <td className="px-4 py-3 text-right font-medium">{l.clicks}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => copy(l)}
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
-                    >
-                      {copied === l._id ? "Copied ✓" : "Copy"}
-                    </button>
-                    <button
-                      onClick={() => remove(l)}
-                      className="ml-2 rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
-                    >
-                      Delete
-                    </button>
+                    <RowActions>
+                      {/* Copy keeps its word: the label doubles as the
+                          "Copied ✓" confirmation, which an icon cannot carry. */}
+                      <button
+                        onClick={() => copy(l)}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                      >
+                        {copied === l._id ? "Copied ✓" : "Copy"}
+                      </button>
+                      <RowAction action="delete" label="Delete" onClick={() => remove(l)} />
+                    </RowActions>
                   </td>
                 </tr>
               ))}

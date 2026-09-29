@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
 import type { Workflow } from "@/lib/types";
@@ -166,20 +167,10 @@ export default function WorkflowsPage() {
                     {new Date(wf.updatedAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/workflows/${wf._id}`}
-                        className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => remove(wf)}
-                        className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions>
+                      <RowAction action="edit" label="Edit" href={`/workflows/${wf._id}`} />
+                      <RowAction action="delete" label="Delete" onClick={() => remove(wf)} />
+                    </RowActions>
                   </td>
                 </tr>
               ))}

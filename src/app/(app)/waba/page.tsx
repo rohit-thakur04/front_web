@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
 import type { WabaTemplate } from "@/lib/types";
 import { PageHeader } from "@/components/ui";
 
@@ -178,12 +179,9 @@ export default function WabaListPage() {
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <button
-                    onClick={() => remove(t)}
-                    className="text-xs text-slate-500 hover:text-red-600"
-                  >
-                    Delete
-                  </button>
+                  <RowActions>
+                    <RowAction action="delete" label="Delete" onClick={() => remove(t)} />
+                  </RowActions>
                 </td>
               </tr>
             ))}
