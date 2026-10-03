@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { RowAction, RowActions } from "@/components/RowActions";
+import { ClientEditDialog } from "@/components/ClientEditDialog";
 import { useAuth } from "@/lib/auth";
 import type { Plan, Role, User } from "@/lib/types";
 import { PageHeader, StatTile } from "@/components/ui";
@@ -35,6 +37,8 @@ export default function ClientsPage() {
 
   // Credentials are shown once after creation; the hash can never be read back.
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  // The account being edited, or null when the dialog is closed.
+  const [editing, setEditing] = useState<User | null>(null);
 
   // Route guard. The API enforces admin independently — this only keeps a
   // non-admin from seeing a broken page.
@@ -281,12 +285,23 @@ export default function ClientsPage() {
               <th className="px-3 py-2">Role</th>
               <th className="px-3 py-2">Plan</th>
               <th className="px-3 py-2">Created</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u._id} className="border-b border-slate-100 last:border-0">
-                <td className="px-3 py-2 font-medium">{u.name}</td>
+                <td className="px-3 py-2 font-medium">
+                  {u.name}
+                  {u.disabled && (
+                    // Worth seeing in the list: a deactivated account looks
+                    // identical to an active one otherwise, and the usual
+                    // question about it is "why can't they log in?".
+                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                      inactive
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-slate-600">{u.email}</td>
                 <td className="px-3 py-2">
                   <span
@@ -311,11 +326,28 @@ export default function ClientsPage() {
                 <td className="px-3 py-2 text-slate-500">
                   {new Date(u.createdAt).toLocaleDateString()}
                 </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  <RowActions>
+                    <RowAction action="edit" label="Edit account" onClick={() => setEditing(u)} />
+                  </RowActions>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <ClientEditDialog
+          user={editing}
+          plans={plans}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
