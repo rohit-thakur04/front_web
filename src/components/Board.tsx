@@ -357,6 +357,10 @@ export function Board({
       {editing && (
         <CardDialog
           stageId={editing.stageId}
+          // The board already holds every stage of this pipeline, so the
+          // dropdown is a free alternative to dragging — which is the only
+          // option on a phone.
+          stages={board.stages}
           card={editing.card}
           onClose={() => setEditing(null)}
           onSaved={async () => {

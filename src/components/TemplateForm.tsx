@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, apiBase, getToken } from "@/lib/api";
 import type { EmailTemplate } from "@/lib/types";
@@ -27,6 +27,41 @@ export function TemplateForm({ stageId, template }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+
+  /*
+   * The day numbers already taken in this stage.
+   *
+   * Duplicates were accepted silently, so a stage could end up with two Day 1
+   * templates and no indication which of them a contact would receive. The
+   * server still allows it — there are legitimate reasons to send two emails on
+   * one day — but it should be a decision rather than an accident.
+   */
+  const [takenDays, setTakenDays] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (!stageId) return;
+    let live = true;
+    async function run() {
+      try {
+        const siblings = await api<EmailTemplate[]>(`/templates?stageId=${stageId}`);
+        if (!live) return;
+        setTakenDays(
+          siblings
+            .filter((t) => t._id !== template?._id)
+            .map((t) => t.dayNumber)
+            .filter((d) => d > 0),
+        );
+      } catch {
+        // Only powers a warning; its absence must not block saving.
+      }
+    }
+    run();
+    return () => {
+      live = false;
+    };
+  }, [stageId, template?._id]);
+
+  const dayClash = dayNumber !== "" && takenDays.includes(Number(dayNumber));
 
   async function upload(file: File) {
     setUploading(true);
@@ -77,7 +112,10 @@ export function TemplateForm({ stageId, template }: Props) {
       } else {
         await api("/templates", { method: "POST", body: { ...body, stageId } });
       }
-      router.push("/templates");
+      // Carries the stage back with it, so the template that was just saved is
+      // the one on screen. Returning to the bare list landed on whichever stage
+      // happened to be first, where the new template was nowhere to be seen.
+      router.push(`/templates?stageId=${stageId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save template");
     } finally {
@@ -94,7 +132,7 @@ export function TemplateForm({ stageId, template }: Props) {
         <div className="ml-auto flex gap-2">
           <button
             type="button"
-            onClick={() => router.push("/templates")}
+            onClick={() => router.push(`/templates?stageId=${stageId}`)}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
           >
             Cancel
@@ -123,14 +161,27 @@ export function TemplateForm({ stageId, template }: Props) {
           />
         </Field>
 
-        <Field label="Day number" hint="Leave blank to use the next free day">
+        {/* The hint names the minimum. It used to say only "leave blank to use
+            the next free day", so entering 0 produced "Value must be greater
+            than or equal to 1" from a field that had never mentioned a floor. */}
+        <Field
+          label="Day number"
+          hint="Day 1 is the earliest — it sends as soon as the contact enters the stage. Leave blank to use the next free day."
+        >
           <input
             type="number"
             min="1"
+            step="1"
             value={dayNumber}
             onChange={(e) => setDayNumber(e.target.value)}
             className="input"
           />
+          {dayClash && (
+            <p className="mt-1 text-xs text-amber-700">
+              Day {dayNumber} already has a template in this stage. Both will be
+              sent — use a different day if that is not what you want.
+            </p>
+          )}
         </Field>
 
         <Field label="Subject *">

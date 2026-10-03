@@ -1073,7 +1073,21 @@ function summaryFor(step: WorkflowStep, templates: EmailTemplate[]): string {
       return s("field") ? `${s("field")} ${s("operator") || "equals"} ${s("value")}`.trim() : "";
     default:
       // Delay/timing steps store amount + unit.
-      if (s("amount") && s("unit")) return `${s("amount")} ${s("unit")}`;
+      if (s("amount") && s("unit")) return durationLabel(s("amount"), s("unit"));
       return s("notes") ? "configured" : "";
   }
+}
+
+/**
+ * A duration in words, with the unit made singular where it should be.
+ *
+ * The step card read "Delay · 1 days". Small, but it is on the canvas of the
+ * feature the product is sold on, and that is the kind of detail that makes
+ * software look unfinished.
+ */
+function durationLabel(amount: string, unit: string): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return `${amount} ${unit}`;
+  const singular = unit.replace(/s$/, "");
+  return `${amount} ${n === 1 ? singular : unit}`;
 }

@@ -413,6 +413,11 @@ export default function ContactsPage() {
         <CardDialog
           stageId={editing.stageId}
           card={editing}
+          // Only available when a pipeline filter is active, because that is
+          // when the fetched stages belong to this contact's pipeline. Offering
+          // another pipeline's stages here would move the contact between
+          // pipelines without saying so.
+          stages={editing.pipelineId === filter.pipelineId ? stages : undefined}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);

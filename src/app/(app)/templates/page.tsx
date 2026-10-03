@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { EmailTemplate, Pipeline, Stage } from "@/lib/types";
@@ -8,6 +9,11 @@ import type { EmailTemplate, Pipeline, Stage } from "@/lib/types";
 type Tab = "templates" | "archived";
 
 export default function TemplatesPage() {
+  // Read once on mount: it seeds the stage selection and must not fight the
+  // user's later choice from the dropdown.
+  const searchParams = useSearchParams();
+  const [wantedStageId] = useState(() => searchParams.get("stageId") ?? "");
+
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState("");
   const [stages, setStages] = useState<Stage[]>([]);
@@ -35,21 +41,34 @@ export default function TemplatesPage() {
     api<Stage[]>(`/pipelines/${pipelineId}/stages`)
       .then((list) => {
         setStages(list);
-        setStageId(list[0]?._id ?? "");
+        // Honour ?stageId= when it belongs to this pipeline, so coming back from
+        // the editor lands on the stage that was just saved into rather than on
+        // whichever stage happens to be first.
+        const wanted = wantedStageId;
+        setStageId(
+          wanted && list.some((s) => s._id === wanted) ? wanted : (list[0]?._id ?? ""),
+        );
       })
       .catch((e) => setError(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pipelineId]);
 
+  /*
+   * Every template for this tab is fetched once and filtered in the browser.
+   *
+   * It used to refetch per stage, with the stage defaulting to the first one in
+   * the first pipeline. So a template saved into any other stage was simply not
+   * in the response, the list said "No templates here yet", and the obvious
+   * conclusion was that the save had failed — a QA pass produced two identical
+   * templates that way before noticing. Holding the whole set also means the
+   * empty state can say where the others actually are, instead of implying
+   * there are none.
+   */
   async function loadTemplates() {
-    if (!stageId) {
-      setTemplates([]);
-      return;
-    }
     try {
-      const list = await api<EmailTemplate[]>(
-        `/templates?stageId=${stageId}&archived=${tab === "archived"}`,
+      setTemplates(
+        await api<EmailTemplate[]>(`/templates?archived=${tab === "archived"}`),
       );
-      setTemplates(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load templates");
     }
@@ -61,24 +80,33 @@ export default function TemplatesPage() {
     }
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageId, tab]);
+  }, [tab]);
+
+  // Templates in the selected stage, before the search box is applied.
+  const inStage = useMemo(
+    () => (stageId ? templates.filter((t) => t.stageId === stageId) : templates),
+    [templates, stageId],
+  );
+  // How many sit in a stage other than the selected one, so an empty list can
+  // distinguish "you have none" from "none here".
+  const elsewhere = templates.length - inStage.length;
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = term
-      ? templates.filter(
+      ? inStage.filter(
           (t) =>
             t.name.toLowerCase().includes(term) ||
             t.subject.toLowerCase().includes(term),
         )
-      : templates;
+      : inStage;
 
     return [...filtered].sort((a, b) => {
       const cmp =
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       return sortLatestFirst ? cmp : -cmp;
     });
-  }, [templates, search, sortLatestFirst]);
+  }, [inStage, search, sortLatestFirst]);
 
   const stageName = stages.find((s) => s._id === stageId)?.name ?? "";
 
@@ -229,8 +257,44 @@ export default function TemplatesPage() {
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                  No templates here yet.
+                <td colSpan={5} className="px-3 py-10 text-center">
+                  {templates.length === 0 ? (
+                    <div className="text-slate-500">
+                      <p className="font-medium text-slate-700">
+                        No {tab === "archived" ? "archived " : ""}templates yet
+                      </p>
+                      <p className="mt-1 text-sm">
+                        A template is one email in a stage&apos;s follow-up
+                        sequence, sent on the day number you give it.
+                      </p>
+                      {tab === "templates" && stageId && (
+                        <Link
+                          href={`/templates/new?stageId=${stageId}`}
+                          className="mt-3 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          Create your first template
+                        </Link>
+                      )}
+                    </div>
+                  ) : search.trim() ? (
+                    <p className="text-sm text-slate-500">
+                      Nothing matches &ldquo;{search.trim()}&rdquo; in this stage.
+                    </p>
+                  ) : (
+                    <div className="text-slate-500">
+                      <p className="text-sm">
+                        No templates in this stage.
+                      </p>
+                      {elsewhere > 0 && (
+                        // The point of the fix: a stage-scoped list that says
+                        // "none yet" reads as a failed save.
+                        <p className="mt-1 text-sm">
+                          You have {elsewhere} in other stages — pick a different
+                          stage above.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
