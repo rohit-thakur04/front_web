@@ -243,6 +243,14 @@ export interface Funnel {
   publishedHtml: string;
   published: boolean;
   publishedAt: string | null;
+  /**
+   * Where the API serves this page, resolved server-side.
+   *
+   * Sent rather than assembled in the browser because it depends on
+   * PUBLIC_BASE_URL and the answering host. Optional so an older API build does
+   * not break the editor.
+   */
+  publicUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -566,6 +574,8 @@ export interface ShortURL {
   campaign: string;
   clicks: number;
   lastClickedAt?: string | null;
+  /** The whole link to hand out, resolved server-side. See Funnel.publicUrl. */
+  shortUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -15,9 +15,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "settings", label: "Settings" },
 ];
 
-// The intended public address. Actually serving this needs hosting/DNS, so it is
-// shown as the target while Preview renders the page in-app.
-const PUBLIC_HOST = "https://arkquen.com/site";
 
 export default function FunnelDetailPage() {
   const params = useParams<{ id: string }>();
@@ -59,7 +56,16 @@ export default function FunnelDetailPage() {
     );
   }
 
-  const publicUrl = `${PUBLIC_HOST}/${funnel.slug}`;
+  /*
+   * The address the server actually serves this page at.
+   *
+   * It used to be a hardcoded https://arkquen.com/site/<slug>, which returned
+   * 404 — the route did not exist, and Open rendered a blob: URL generated inside
+   * the author's own browser that could not be shared with anyone. The API now
+   * serves /site/<slug> and tells us where, so what is displayed is the link that
+   * works.
+   */
+  const publicUrl = funnel.publicUrl;
   const hasContent = funnel.html.trim().length > 0;
 
   return (
@@ -133,15 +139,35 @@ export default function FunnelDetailPage() {
             <div className="rounded-lg bg-slate-50 p-3">
               <div className="flex items-center gap-2">
                 <span className="text-slate-400">🔗</span>
-                <span className="flex-1 truncate text-sm text-slate-500">{publicUrl}</span>
+                <span className="flex-1 truncate text-sm text-slate-500" title={publicUrl}>
+                  {publicUrl}
+                </span>
                 <button
                   onClick={() => navigator.clipboard.writeText(publicUrl)}
                   className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-white"
                 >
                   Copy
                 </button>
+                {/* Only offered once published, because that is the only state in
+                    which the address serves anything. Offering it on a draft is
+                    how the old blob: preview came to be mistaken for a live page. */}
+                {funnel.published && (
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-white"
+                  >
+                    Open ↗
+                  </a>
+                )}
               </div>
-              <p className="mt-1 text-xs text-slate-400">Path: /{funnel.slug}</p>
+              <p className="mt-1 text-xs text-slate-400">Path: /site/{funnel.slug}</p>
+              {!funnel.published && hasContent && (
+                <p className="mt-1 text-xs text-slate-400">
+                  This address returns &ldquo;not found&rdquo; until you publish.
+                </p>
+              )}
               {!hasContent && (
                 <p className="mt-1 text-xs text-amber-600">
                   ⚠ This page is empty. Add HTML in the editor, then publish to preview it.

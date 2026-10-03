@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, apiBase } from "@/lib/api";
+import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
 import type { ShortURL } from "@/lib/types";
 
-// The redirect lives on the API host, not the web host — /r/:code is served by
-// the Go router, so a link must point there to resolve.
-function shortLink(code: string) {
-  return `${apiBase}/r/${code}`;
+/*
+ * The link to hand out comes from the server, which knows where it is served.
+ *
+ * It used to be built from whichever API base the browser happened to be calling,
+ * so Copy produced an ark-production-….up.railway.app link — a campaign URL that
+ * advertises the hosting provider and reads as phishing to the recipient. The
+ * server now returns `shortUrl`, resolved against PUBLIC_BASE_URL, so pointing a
+ * custom domain at the API changes every link already created.
+ *
+ * The fallback keeps the row readable against an older API build that does not
+ * send the field.
+ */
+function shortLink(link: ShortURL) {
+  return link.shortUrl || `/r/${link.code}`;
 }
 
 export function URLsTab() {
@@ -82,7 +92,7 @@ export function URLsTab() {
 
   async function copy(link: ShortURL) {
     try {
-      await navigator.clipboard.writeText(shortLink(link.code));
+      await navigator.clipboard.writeText(shortLink(link));
       setCopied(link._id);
       setTimeout(() => setCopied(""), 1500);
     } catch {
@@ -186,7 +196,11 @@ export function URLsTab() {
               {links.map((l) => (
                 <tr key={l._id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3">
-                    <span className="font-medium">/r/{l.code}</span>
+                    {/* The host is shown, not just the path: the report's point
+                        was that you cannot tell what you are about to copy. */}
+                    <span className="font-medium" title={shortLink(l)}>
+                      {shortLink(l).replace(/^https?:\/\//, "")}
+                    </span>
                     {l.title && <p className="text-xs text-slate-500">{l.title}</p>}
                   </td>
                   <td className="max-w-xs truncate px-4 py-3 text-slate-600" title={l.targetUrl}>

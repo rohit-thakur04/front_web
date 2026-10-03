@@ -87,7 +87,13 @@ export function FunnelEditor({ funnel, onExit, onChange }: Props) {
       const published = await api<Funnel>(`/funnels/${funnel._id}/publish`, { method: "POST" });
       setSavedHtml(published.html);
       onChange(published);
-      setNotice("Published. Switch to Preview to see it live.");
+      // Names the address, because that is the question a client asks the moment
+      // they press Publish and the product never used to answer it.
+      setNotice(
+        published.publicUrl
+          ? `Published — live at ${published.publicUrl}`
+          : "Published.",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not publish");
     } finally {
@@ -95,7 +101,24 @@ export function FunnelEditor({ funnel, onExit, onChange }: Props) {
     }
   }
 
+  /*
+   * Opens the live page where one exists, and a local render where it does not.
+   *
+   * This button used to always build a blob: URL from the editor's buffer. That
+   * looks exactly like the published page, which is how it came to stand in for
+   * one — a QA pass found the funnel module shipping a "public URL" that 404s
+   * while Open produced an address generated inside the author's own browser
+   * that could not be sent to anybody.
+   *
+   * So: once published, Open goes to the real address, which is the thing the
+   * author actually needs to test and share. Before that it keeps rendering the
+   * draft locally, and the label says which of the two it is doing.
+   */
   function openInNewTab() {
+    if (funnel.published && funnel.publicUrl) {
+      window.open(funnel.publicUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
@@ -152,9 +175,14 @@ export function FunnelEditor({ funnel, onExit, onChange }: Props) {
           )}
           <button
             onClick={openInNewTab}
+            title={
+              funnel.published
+                ? "Open the published page at its public address"
+                : "Render this draft locally — it is not online yet"
+            }
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
           >
-            ↗ Open
+            {funnel.published ? "↗ Open live" : "↗ Open draft"}
           </button>
           <button
             onClick={save}
