@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import type { Funnel } from "@/lib/types";
+import type { Funnel, FunnelPage } from "@/lib/types";
 import { FunnelEditor } from "@/components/leadgen/FunnelEditor";
+import { Icon } from "@/components/icons";
 
 type Tab = "pages" | "analytics" | "tracking" | "settings";
 const TABS: { key: Tab; label: string }[] = [
@@ -22,6 +23,11 @@ export default function FunnelDetailPage() {
   const [tab, setTab] = useState<Tab>("pages");
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  // Which page the right-hand panel and the editor are showing. Null falls back
+  // to home, so the page survives a reload and a funnel that gains its first
+  // extra page does not jump.
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [addingPage, setAddingPage] = useState(false);
 
   async function load() {
     try {
@@ -42,11 +48,92 @@ export default function FunnelDetailPage() {
   if (error) return <p className="p-6 text-sm text-rose-600">{error}</p>;
   if (!funnel) return <p className="p-6 text-sm text-slate-500">Loading…</p>;
 
+  /*
+   * The page list, and which one is in focus.
+   *
+   * `pages` is always populated by the API — it fills one in for funnels saved
+   * before multi-page support — but the fallback stays because a stale cached
+   * response during a deploy would otherwise crash the whole screen rather than
+   * show one page.
+   */
+  const pages: FunnelPage[] =
+    funnel.pages && funnel.pages.length > 0
+      ? funnel.pages
+      : [
+          {
+            id: "home",
+            name: "Home",
+            path: "",
+            html: funnel.html,
+            publishedHtml: funnel.publishedHtml,
+          },
+        ];
+  // Falls back to home when the selected page has just been deleted, rather
+  // than leaving the panel pointed at nothing.
+  const selectedPage = pages.find((p) => p.id === selectedPageId) ?? pages[0];
+
+  async function addPage() {
+    const name = window.prompt("Page name", "Thank you");
+    if (!name?.trim()) return;
+    setAddingPage(true);
+    setError("");
+    try {
+      const updated = await api<Funnel>(`/funnels/${params.id}/pages`, {
+        method: "POST",
+        body: { name: name.trim() },
+      });
+      setFunnel(updated);
+      // Select what was just created: adding a page and landing back on the old
+      // one reads as the click not having worked.
+      const added = updated.pages?.[updated.pages.length - 1];
+      if (added) setSelectedPageId(added.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the page");
+    } finally {
+      setAddingPage(false);
+    }
+  }
+
+  async function renamePage(page: FunnelPage) {
+    const name = window.prompt("Page name", page.name);
+    if (!name?.trim() || name.trim() === page.name) return;
+    try {
+      setFunnel(
+        await api<Funnel>(`/funnels/${params.id}/pages/${page.id}`, {
+          method: "PATCH",
+          body: { name: name.trim() },
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not rename the page");
+    }
+  }
+
+  async function removePage(page: FunnelPage) {
+    if (
+      !window.confirm(
+        `Delete "${page.name}"? Its content goes with it, and /${page.path} will stop working for anyone who has the link.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const updated = await api<Funnel>(`/funnels/${params.id}/pages/${page.id}`, {
+        method: "DELETE",
+      });
+      setFunnel(updated);
+      if (selectedPageId === page.id) setSelectedPageId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete the page");
+    }
+  }
+
   // The code editor takes over the whole view when editing.
   if (editing) {
     return (
       <FunnelEditor
         funnel={funnel}
+        page={selectedPage}
         onExit={async () => {
           setEditing(false);
           await load();
@@ -65,8 +152,11 @@ export default function FunnelDetailPage() {
    * serves /site/<slug> and tells us where, so what is displayed is the link that
    * works.
    */
-  const publicUrl = funnel.publicUrl;
-  const hasContent = funnel.html.trim().length > 0;
+  // A sub-page hangs off the funnel's own address.
+  const publicUrl = selectedPage.path
+    ? `${funnel.publicUrl}/${selectedPage.path}`
+    : funnel.publicUrl;
+  const hasContent = selectedPage.html.trim().length > 0;
 
   return (
     <div className="p-6">
@@ -121,20 +211,84 @@ export default function FunnelDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold">Pages</span>
-              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-xs">1</span>
-            </div>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">⌂ Home</span>
-                <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[11px] text-white">Active</span>
+              <div className="flex items-center gap-1.5">
+                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-xs">
+                  {pages.length}
+                </span>
+                {/* The whole point of a funnel is more than one page. This was
+                    a hardcoded list of exactly one. */}
+                <button
+                  onClick={addPage}
+                  disabled={addingPage}
+                  title="Add a page"
+                  aria-label="Add a page"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+                >
+                  +
+                </button>
               </div>
-              <p className="text-xs text-slate-500">/</p>
+            </div>
+
+            <div className="space-y-1.5">
+              {pages.map((pg, i) => {
+                const active = pg.id === selectedPage.id;
+                return (
+                  <div
+                    key={pg.id}
+                    className={`group rounded-lg border px-3 py-2 transition ${
+                      active
+                        ? "border-blue-200 bg-blue-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedPageId(pg.id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span className="block truncate text-sm font-medium">
+                          {i === 0 ? "⌂ " : ""}
+                          {pg.name}
+                        </span>
+                        <span className="block truncate text-xs text-slate-500">
+                          /{pg.path}
+                        </span>
+                      </button>
+                      {active && (
+                        <span className="shrink-0 rounded bg-blue-600 px-1.5 py-0.5 text-[11px] text-white">
+                          Active
+                        </span>
+                      )}
+                      {/* Home has no delete: it is the address on every link
+                          already shared, and the server refuses it anyway. */}
+                      {i > 0 && (
+                        <button
+                          onClick={() => removePage(pg)}
+                          title="Delete page"
+                          aria-label={`Delete ${pg.name}`}
+                          className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition hover:text-rose-600 group-hover:opacity-100"
+                        >
+                          <Icon.Trash width={14} height={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Home page detail */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-base font-semibold">Home</h2>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold">{selectedPage.name}</h2>
+              <button
+                onClick={() => renamePage(selectedPage)}
+                className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Rename
+              </button>
+            </div>
 
             <div className="rounded-lg bg-slate-50 p-3">
               <div className="flex items-center gap-2">
@@ -162,7 +316,10 @@ export default function FunnelDetailPage() {
                   </a>
                 )}
               </div>
-              <p className="mt-1 text-xs text-slate-400">Path: /site/{funnel.slug}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Path: /site/{funnel.slug}
+                {selectedPage.path ? `/${selectedPage.path}` : ""}
+              </p>
               {!funnel.published && hasContent && (
                 <p className="mt-1 text-xs text-slate-400">
                   This address returns &ldquo;not found&rdquo; until you publish.

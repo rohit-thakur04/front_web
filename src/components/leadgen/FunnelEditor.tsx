@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { Funnel } from "@/lib/types";
+import type { Funnel, FunnelPage } from "@/lib/types";
 
 type Mode = "code" | "preview";
 type Device = "desktop" | "tablet" | "mobile";
@@ -39,12 +39,21 @@ const STARTER_HTML = `<!doctype html>
 
 interface Props {
   funnel: Funnel;
+  /** The page being edited. Omitted means the funnel's home page. */
+  page?: FunnelPage;
   onExit: () => void;
   onChange: (f: Funnel) => void;
 }
 
-export function FunnelEditor({ funnel, onExit, onChange }: Props) {
-  const [html, setHtml] = useState(funnel.html);
+export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
+  /*
+   * The editor edits one page, not the funnel.
+   *
+   * `page` is passed in by the detail screen, which owns the selection. Falling
+   * back to the funnel's own html keeps a caller that predates multi-page
+   * funnels working rather than opening an empty editor.
+   */
+  const [html, setHtml] = useState(page?.html ?? funnel.html);
   const [mode, setMode] = useState<Mode>("code");
   const [device, setDevice] = useState<Device>("desktop");
   const [saving, setSaving] = useState(false);
@@ -53,7 +62,7 @@ export function FunnelEditor({ funnel, onExit, onChange }: Props) {
   const [notice, setNotice] = useState("");
 
   // Dirty = the editor's HTML differs from what's saved on the server.
-  const [savedHtml, setSavedHtml] = useState(funnel.html);
+  const [savedHtml, setSavedHtml] = useState(page?.html ?? funnel.html);
   const dirty = html !== savedHtml;
 
   const lineCount = html ? html.split("\n").length : 0;
@@ -65,7 +74,9 @@ export function FunnelEditor({ funnel, onExit, onChange }: Props) {
     try {
       const updated = await api<Funnel>(`/funnels/${funnel._id}`, {
         method: "PUT",
-        body: { html },
+        // The page id is what routes this content to the right page; without it
+        // the server writes to home, which is the old single-page behaviour.
+        body: { html, pageId: page?.id },
       });
       setSavedHtml(updated.html);
       onChange(updated);

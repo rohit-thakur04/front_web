@@ -233,12 +233,30 @@ export interface FormCatalog {
 
 export type FunnelType = "funnel" | "website" | "link_page";
 
+/** One page inside a funnel. The first is always home, and its path is empty. */
+export interface FunnelPage {
+  id: string;
+  name: string;
+  /** The segment after the slug. Empty means the funnel's own address. */
+  path: string;
+  html: string;
+  publishedHtml: string;
+}
+
 export interface Funnel {
   _id: string;
   ownerId: string;
   name: string;
   type: FunnelType;
   slug: string;
+  /**
+   * Every page in the funnel, home first.
+   *
+   * Always sent — the API fills it in for funnels saved before multi-page
+   * support, so the browser never has to know they existed.
+   */
+  pages: FunnelPage[];
+  /** The home page's content. Kept for compatibility; read `pages` instead. */
   html: string;
   publishedHtml: string;
   published: boolean;
