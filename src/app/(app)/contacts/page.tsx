@@ -57,6 +57,7 @@ export default function ContactsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [importing, setImporting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -214,10 +215,26 @@ export default function ContactsPage() {
             </button>
             <button
               onClick={() => setImporting(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
             >
               <Icon.Upload width={15} height={15} />
               Import CSV
+            </button>
+            {/* The primary action on a page about contacts is adding one.
+                Import keeps its place beside Export — both are bulk tools, and
+                neither is what someone reaches for with one lead in hand. */}
+            <button
+              onClick={() => setAdding(true)}
+              disabled={pipelines.length === 0}
+              title={
+                pipelines.length === 0
+                  ? "Create a pipeline on the Board first — a contact has to live in a stage"
+                  : undefined
+              }
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Icon.UserPlus width={15} height={15} />
+              Add contact
             </button>
           </>
         }
@@ -334,8 +351,17 @@ export default function ContactsPage() {
                     <div className="text-slate-500">
                       <p className="font-medium text-slate-700">No contacts yet</p>
                       <p className="mt-1 text-sm">
-                        Import a CSV, or add a card on the board.
+                        Add one by hand, import a CSV, or let a published form
+                        capture them for you.
                       </p>
+                      {pipelines.length > 0 && (
+                        <button
+                          onClick={() => setAdding(true)}
+                          className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          Add your first contact
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="text-slate-500">
@@ -397,6 +423,30 @@ export default function ContactsPage() {
           </tbody>
         </table>
       </div>
+
+      {adding && (
+        <CardDialog
+          // No stage known up front: the dialog asks which pipeline, then loads
+          // its stages. Seeded with the filtered pipeline when one is selected,
+          // since that is almost always the one being worked on.
+          stageId=""
+          pipelines={
+            filter.pipelineId
+              ? [
+                  ...pipelines.filter((p) => p._id === filter.pipelineId),
+                  ...pipelines.filter((p) => p._id !== filter.pipelineId),
+                ]
+              : pipelines
+          }
+          onClose={() => setAdding(false)}
+          onSaved={async () => {
+            setAdding(false);
+            await load();
+            flash("Contact added.");
+          }}
+          onError={setError}
+        />
+      )}
 
       {importing && (
         <ImportDialog
