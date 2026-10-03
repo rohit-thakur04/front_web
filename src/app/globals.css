@@ -9,6 +9,30 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/*
+  Interactive controls get the hand cursor.
+
+  Tailwind v3's Preflight set `cursor: pointer` on buttons; v4 removed it to
+  match the raw browser default, which is an arrow. Nothing in the app asked for
+  that change and it landed on all 210 buttons at once — so the sidebar links
+  showed a hand while every button beside them, "+ New pipeline" and "Delete
+  pipeline" included, showed an arrow. Two controls that behave identically
+  should not disagree about what they are.
+
+  Disabled controls are excluded so they can say "not here" instead, and the
+  explicit `disabled:cursor-not-allowed` already on some buttons still wins.
+
+  In @layer base so any cursor utility written on an element overrides it.
+*/
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  summary {
+    cursor: pointer;
+  }
+}
+
 /* Shared form control styling, used across the template and WABA builders. */
 @utility input {
   width: 100%;
