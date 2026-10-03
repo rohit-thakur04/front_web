@@ -178,6 +178,20 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
           Enter your SMTP server details from your email provider (host, port, username, and
           password). Port 587 uses STARTTLS; port 465 uses SSL.
         </p>
+        {/* Said here as well as in the error, because reading it first saves the
+            round trip. 465 is the port hosting providers block most often, and a
+            blocked port times out silently rather than refusing. */}
+        <p className="mt-2 text-sm text-slate-500">
+          <span className="font-medium text-slate-700">Use port 587 if you can.</span>{" "}
+          Many hosting providers block outgoing connections on port 465 to prevent
+          spam, and a blocked port shows up as a connection timeout rather than a
+          clear refusal.
+        </p>
+        <p className="mt-2 text-sm text-slate-500">
+          For Gmail or Google Workspace your normal account password will not
+          work — create an App Password in your Google security settings and use
+          that as the password here.
+        </p>
       </div>
 
       {editing && (
