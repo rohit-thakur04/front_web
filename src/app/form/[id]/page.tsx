@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
-import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
+import { PHONE_PATTERN, PHONE_TITLE, sanitizePhoneInput } from "@/lib/phone";
 import { isContentField } from "@/lib/formFields";
 import type { FormField, FormStyles } from "@/lib/types";
 
@@ -275,7 +275,7 @@ function Field({
           inputMode="tel"
           autoComplete="tel"
           pattern={PHONE_PATTERN}
-          title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
+          title={PHONE_TITLE}
           required={field.required}
           value={value}
           // Filtered here rather than only on submit, so a stranger filling this

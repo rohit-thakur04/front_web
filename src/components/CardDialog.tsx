@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
+import { PHONE_PATTERN, PHONE_TITLE, sanitizePhoneInput } from "@/lib/phone";
 import type { Card, Pipeline, Stage } from "@/lib/types";
 
 interface Props {
@@ -210,7 +210,7 @@ export function CardDialog({
             type="tel"
             inputMode="tel"
             pattern={PHONE_PATTERN}
-            title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
+            title={PHONE_TITLE}
             value={phone}
             // The same rule the public form applies, and the one the API now
             // enforces on this path too. Filtering as it is typed is what stops

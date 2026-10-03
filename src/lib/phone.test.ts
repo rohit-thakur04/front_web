@@ -59,3 +59,36 @@ describe("PHONE_PATTERN", () => {
     }
   });
 });
+
+describe("PHONE_PATTERN shape", () => {
+  // The browser applies this as an anchored regex, so the tests do too.
+  const re = new RegExp(`^(?:${PHONE_PATTERN})$`);
+
+  it("accepts the formats the hint promises", () => {
+    for (const v of [
+      "9876543210",
+      "+91 98765 43210",
+      "(022) 2222 3333",
+      "022-2222-3333",
+      "+1 (415) 555-0132",
+    ]) {
+      expect(re.test(v), v).toBe(true);
+    }
+  });
+
+  it("accepts a number written in brackets, which it used to reject", () => {
+    // The old pattern required a digit first, so this ordinary Indian landline
+    // failed against a field whose error message said brackets were fine.
+    expect(re.test("(022) 2222 3333")).toBe(true);
+  });
+
+  it("still rejects letters", () => {
+    for (const v of ["abcxyz", "call me", "98765abcde"]) {
+      expect(re.test(v), v).toBe(false);
+    }
+  });
+
+  it("rejects anything too short to be a number", () => {
+    expect(re.test("12345")).toBe(false);
+  });
+});

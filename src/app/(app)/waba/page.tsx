@@ -22,6 +22,9 @@ export default function WabaListPage() {
   // null while unknown, so the page doesn't flash a "not connected" banner
   // before the check has come back.
   const [connected, setConnected] = useState<boolean | null>(null);
+  // True when the account was set up but its stored keys no longer decrypt.
+  // A different problem from "never connected", and different advice.
+  const [needsReconnect, setNeedsReconnect] = useState(false);
 
   async function load() {
     try {
@@ -30,8 +33,11 @@ export default function WabaListPage() {
       setError(e instanceof Error ? e.message : "Could not load templates");
     }
     try {
-      const conn = await api<{ connected: boolean }>("/waba/connection");
+      const conn = await api<{ connected: boolean; needsReconnect?: boolean }>(
+        "/waba/connection",
+      );
       setConnected(conn.connected);
+      setNeedsReconnect(Boolean(conn.needsReconnect));
     } catch {
       // A failed check must not hide the templates; assume connected and let
       // the server's own gate answer if an action is actually attempted.
@@ -99,12 +105,21 @@ export default function WabaListPage() {
               {refreshing ? "Refreshing…" : "↻ Refresh status"}
             </button>
             {connected === false ? (
-              // A span, not a Link: a disabled anchor is still clickable, so the
-              // client would reach the form and only fail on save.
+              /* A span, not a Link: a disabled anchor is still clickable, so the
+                 client would reach the form and only fail on save.
+
+                 Styled as a muted control rather than a faded primary one. A
+                 blue button at 50% opacity still reads as the blue button it is,
+                 and an audit filed it as a dead control dressed up as an enabled
+                 one — which is exactly how it looked. */
               <span
-                title="Connect your WhatsApp Business Account first"
+                title={
+                  needsReconnect
+                    ? "Your WhatsApp keys can no longer be read — reconnect first"
+                    : "Connect your WhatsApp Business Account first"
+                }
                 aria-disabled="true"
-                className="cursor-not-allowed rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white opacity-50"
+                className="cursor-not-allowed rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-400"
               >
                 + New template
               </span>
@@ -122,11 +137,33 @@ export default function WabaListPage() {
 
       {connected === false && (
         <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-          <strong className="font-medium">No WhatsApp Business Account connected.</strong>{" "}
-          Templates can&apos;t be created or submitted until you connect one.{" "}
-          <Link href="/settings/app-store" className="underline hover:text-amber-900">
-            Connect WhatsApp
-          </Link>
+          {needsReconnect ? (
+            /* The account was connected; its keys stopped decrypting, which
+               happens when the server's secret changes between deploys. Telling
+               someone to connect an account they already connected is how a
+               product earns distrust. */
+            <>
+              <strong className="font-medium">
+                Your WhatsApp keys can no longer be read.
+              </strong>{" "}
+              The account is still set up, but the saved keys can&apos;t be
+              decrypted, so nothing can be sent or submitted. Enter them again to
+              reconnect.{" "}
+              <Link href="/settings/app-store" className="underline hover:text-amber-900">
+                Reconnect WhatsApp
+              </Link>
+            </>
+          ) : (
+            <>
+              <strong className="font-medium">
+                No WhatsApp Business Account connected.
+              </strong>{" "}
+              Templates can&apos;t be created or submitted until you connect one.{" "}
+              <Link href="/settings/app-store" className="underline hover:text-amber-900">
+                Connect WhatsApp
+              </Link>
+            </>
+          )}
         </div>
       )}
 

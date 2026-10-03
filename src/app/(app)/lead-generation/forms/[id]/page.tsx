@@ -11,7 +11,7 @@ import {
 import { StrictModeDroppable } from "@/components/StrictModeDroppable";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
-import { PHONE_PATTERN, sanitizePhoneInput } from "@/lib/phone";
+import { PHONE_PATTERN, PHONE_TITLE, sanitizePhoneInput } from "@/lib/phone";
 import { DEFAULT_HTML_BLOCK, isContentField } from "@/lib/formFields";
 import type {
   Form,
@@ -546,7 +546,7 @@ function FieldPreview({
             if (clean !== el.value) el.value = clean;
           }}
           pattern={PHONE_PATTERN}
-          title="Digits only, optionally starting with + — spaces, hyphens and brackets are fine."
+          title={PHONE_TITLE}
           placeholder={field.placeholder}
           className={base}
           style={inputStyle}
