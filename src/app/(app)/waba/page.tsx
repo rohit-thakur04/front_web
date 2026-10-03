@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
 import type { WabaTemplate } from "@/lib/types";
 import { PageHeader } from "@/components/ui";
+import { MessageSpend } from "@/components/MessageSpend";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
@@ -166,6 +167,10 @@ export default function WabaListPage() {
           )}
         </div>
       )}
+
+      {/* Only once there is a connection to spend through. Showing a client a
+          bill for an account they have not set up is noise. */}
+      {connected === true && <MessageSpend />}
 
       {error && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

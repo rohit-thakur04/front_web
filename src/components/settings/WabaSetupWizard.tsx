@@ -9,15 +9,51 @@ import type { IntegrationProvider } from "@/lib/types";
 const META_APPS = "https://developers.facebook.com/apps/";
 const META_SYSTEM_USERS = "https://business.facebook.com/settings/system-users";
 const WA_GET_STARTED = "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started";
+const WA_MANAGER = "https://business.facebook.com/wa/manage/";
+const META_BILLING = "https://business.facebook.com/billing_hub/accounts";
+const WA_PRICING = "https://developers.facebook.com/docs/whatsapp/pricing";
+
+/*
+Indicative Indian per-message rates, shown so a client can decide whether to
+proceed rather than discover the cost on a Meta invoice later.
+
+Deliberately approximate and labelled as such. Meta sets these, has revised them
+more than once, and the figure that matters to a client is the ratio — marketing
+costs roughly seven times utility, which is the one choice they control when
+writing a template.
+*/
+const RATES = [
+  { category: "Marketing", example: "offers, re-engagement", cost: "~Rs 0.78" },
+  { category: "Utility", example: "order and appointment updates", cost: "~Rs 0.11" },
+  { category: "Authentication", example: "OTPs", cost: "~Rs 0.12" },
+  { category: "Service", example: "your replies within 24h", cost: "Free" },
+];
+
+/*
+What Meta says about the token itself.
+
+Absent when the introspection call failed, which is a distinct state from "the
+token is permanent" and is rendered as such — a client reassured by silence is a
+client who never creates the permanent token.
+*/
+interface TokenReport {
+  neverExpires: boolean;
+  expiresAt?: string;
+  expiresInHours?: number;
+  /** Set to "temporary" when the token dies too soon to rely on. */
+  warning?: string;
+  missingScopes?: string[] | null;
+}
 
 interface TestResult {
   ok: boolean;
   phone?: string;
   name?: string;
   message?: string;
+  token?: TokenReport | null;
 }
 
-const STEPS = ["Create app", "Access token", "IDs", "Add recipient", "Test", "Finish"];
+const STEPS = ["Create app", "Access token", "IDs", "Add recipient", "Billing", "Test", "Finish"];
 
 export function WabaSetupWizard({
   provider,
@@ -33,6 +69,10 @@ export function WabaSetupWizard({
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [wabaId, setWabaId] = useState("");
   const [recipientDone, setRecipientDone] = useState(false);
+  // Self-reported, and stays in the wizard rather than being stored: we cannot
+  // verify a client's Meta payment method, and a stored claim that we never
+  // check would read as verified when it is not.
+  const [billingDone, setBillingDone] = useState(false);
 
   const [testing, setTesting] = useState(false);
   const [test, setTest] = useState<TestResult | null>(null);
@@ -213,6 +253,66 @@ export function WabaSetupWizard({
 
           {step === 4 && (
             <StepShell
+              title="Add your payment method on Meta"
+              body="Meta bills you directly for the messages you send — Arkquen never charges for them and never sees your card. Add a payment method to your WhatsApp Business Account now, or template sending will start failing once your free allowance runs out."
+            >
+              <MetaLink href={WA_MANAGER}>Open WhatsApp Manager</MetaLink>
+              <MetaLink href={META_BILLING} subtle>
+                Open Meta billing settings
+              </MetaLink>
+
+              <div className="mt-1 overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="px-2.5 py-1.5 font-medium">Message type</th>
+                      <th className="px-2.5 py-1.5 font-medium">Per message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RATES.map((r) => (
+                      <tr key={r.category} className="border-t border-slate-100">
+                        <td className="px-2.5 py-1.5">
+                          <span className="font-medium">{r.category}</span>
+                          <span className="block text-slate-500">{r.example}</span>
+                        </td>
+                        <td className="px-2.5 py-1.5 whitespace-nowrap font-medium">{r.cost}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-slate-500">
+                Indian rates, approximate. Meta sets them and changes them from time to time — see
+                the{" "}
+                <a
+                  href={WA_PRICING}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-slate-700"
+                >
+                  current rate card
+                </a>
+                .
+              </p>
+
+              <label className="mt-1 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={billingDone}
+                  onChange={(e) => setBillingDone(e.target.checked)}
+                />
+                I&apos;ve added a payment method to my WhatsApp Business Account
+              </label>
+              <Tip>
+                Replying to a customer within 24 hours of their message is always free. Most of what
+                this product does for you costs nothing to send.
+              </Tip>
+            </StepShell>
+          )}
+
+          {step === 5 && (
+            <StepShell
               title="Test the connection"
               body="We'll call Meta with your details to confirm they work — without saving anything yet."
             >
@@ -229,6 +329,10 @@ export function WabaSetupWizard({
                   {test.name ? ` (${test.name})` : ""}
                 </div>
               )}
+              {/* Shown here rather than only in the summary: this is the last
+                  point at which the client is still on Meta's site in another
+                  tab and will go back to fix it. */}
+              {test?.ok && <TokenNotice token={test.token} />}
               {test && !test.ok && (
                 <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
                   ✗ {test.message || "Connection failed"}
@@ -241,7 +345,7 @@ export function WabaSetupWizard({
             </StepShell>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <StepShell
               title="Finish"
               body="Save the connection. Your credentials are encrypted at rest and used to send WhatsApp templates from your workflows."
@@ -254,11 +358,23 @@ export function WabaSetupWizard({
                   label="Connection test"
                   value={test?.ok ? "✓ passed" : test ? "✗ failed" : "not tested"}
                 />
+                <Row label="Access token life" value={tokenSummary(test)} />
+                <Row
+                  label="Payment method"
+                  value={billingDone ? "✓ confirmed" : "— not confirmed"}
+                />
               </div>
               {!test?.ok && (
                 <Tip>
                   You can save without a passing test, but sending won&apos;t work until the
                   connection is valid.
+                </Tip>
+              )}
+              <TokenNotice token={test?.token} />
+              {!billingDone && (
+                <Tip>
+                  No payment method confirmed. Sending works until your free allowance runs out, then
+                  stops — add one in WhatsApp Manager whenever you&apos;re ready.
                 </Tip>
               )}
               {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
@@ -297,7 +413,65 @@ export function WabaSetupWizard({
   );
 }
 
+/*
+tokenSummary renders the token's lifetime for the summary table.
+
+Keeps three states apart that it would be easy to collapse into two: we never
+asked, we asked and Meta would not say, and we know. Only the third justifies a
+claim either way.
+*/
+function tokenSummary(test?: TestResult | null): string {
+  if (!test?.ok) return "not checked";
+  if (!test.token) return "couldn't be checked";
+  if (test.token.neverExpires) return "✓ permanent";
+  const hours = test.token.expiresInHours;
+  if (hours === undefined) return "expires — unknown when";
+  return `${test.token.warning === "temporary" ? "✗" : "·"} expires in ~${hours}h`;
+}
+
+/*
+TokenNotice is the warning that a connection which just passed its test is going
+to stop working anyway.
+
+Renders nothing when there is nothing to say — including when Meta would not
+tell us, because an unprompted "we could not check your token" is alarming
+without being actionable.
+*/
+function TokenNotice({ token }: { token?: TokenReport | null }) {
+  if (!token) return null;
+
+  const missing = token.missingScopes ?? [];
+  const temporary = token.warning === "temporary";
+  if (!temporary && missing.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      {temporary && (
+        <p>
+          <span className="font-medium">
+            This token expires in about {token.expiresInHours ?? 24} hours.
+          </span>{" "}
+          It&apos;s the temporary one from API Setup, so sending will stop tomorrow. Create a System
+          User token and paste that in step 2 instead — it doesn&apos;t expire.
+        </p>
+      )}
+      {missing.length > 0 && (
+        <p>
+          This token is missing {missing.join(" and ")}. Sending may be refused by Meta — add the
+          permission where you created the token.
+        </p>
+      )}
+      {temporary && (
+        <MetaLink href={META_SYSTEM_USERS} subtle>
+          Create a permanent System User token
+        </MetaLink>
+      )}
+    </div>
+  );
+}
+
 function StepShell({
+
   title,
   body,
   children,

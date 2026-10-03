@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type {
   Integration,
   IntegrationGroup,
@@ -16,6 +17,14 @@ const CUSTOM_SMTP = "custom_smtp";
 const WHATSAPP = "whatsapp";
 
 export function AppStore() {
+  /*
+   * Every /waba/* route is gated on the "waba" plan feature, but saving the
+   * credentials is not. Without this, a client on a plan without WhatsApp could
+   * walk the whole wizard and fail at the connection test with "Your plan does
+   * not include this feature" — which reads as their Meta details being wrong,
+   * sending them back to Meta to fix something that was never broken.
+   */
+  const { hasFeature } = useAuth();
   const [catalog, setCatalog] = useState<IntegrationGroup[]>([]);
   const [connections, setConnections] = useState<Integration[]>([]);
   const [smtpConns, setSmtpConns] = useState<SMTPConnection[]>([]);
@@ -121,6 +130,7 @@ export function AppStore() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {group.providers.map((p) => {
                 const isSmtp = p.key === CUSTOM_SMTP;
+                const locked = p.key === WHATSAPP && !hasFeature("waba");
                 const conn = byProvider[p.key];
                 const connected = isSmtp ? smtpConnected : conn?.status === "connected";
                 /*
@@ -203,7 +213,14 @@ export function AppStore() {
                             ? "● Connected"
                             : "○ Disconnected"}
                       </span>
-                      {isSmtp ? (
+                      {locked ? (
+                        <span
+                          title="Ask your administrator to enable WhatsApp on your plan."
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-400"
+                        >
+                          Not in your plan
+                        </span>
+                      ) : isSmtp ? (
                         <button
                           onClick={() => setSmtpOpen(true)}
                           className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
