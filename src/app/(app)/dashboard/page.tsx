@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import type { AutomationLog, Contact, ContactsResponse, Pipeline, Stage } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { PageHeader, Section, StatTile } from "@/components/ui";
+import { AttentionStrip } from "@/components/AttentionStrip";
 import { AreaTrend, BarList, Meter, StackedColumns } from "@/components/charts";
 
 interface Metrics {
@@ -245,6 +246,10 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      {/* Above the tiles on purpose. The tiles say how much is happening; this
+          says what is not working, and that is the thing worth seeing first. */}
+      <AttentionStrip />
 
       {error && (
         <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
