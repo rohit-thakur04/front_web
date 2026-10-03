@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ContactSubmissions } from "@/components/ContactSubmissions";
 import { api } from "@/lib/api";
 import { PHONE_PATTERN, PHONE_TITLE, sanitizePhoneInput } from "@/lib/phone";
 import type { Card, Pipeline, Stage } from "@/lib/types";
@@ -181,7 +182,11 @@ export function CardDialog({
         aria-labelledby="card-dialog-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={save}
-        className="max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+        // Wider only when editing, where the submission history needs room for a
+        // label and a value side by side. Add contact keeps its original width.
+        className={`max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-xl bg-white p-5 shadow-xl ${
+          card ? "max-w-md" : "max-w-sm"
+        }`}
       >
         <h2 id="card-dialog-title" className="text-base font-semibold">
           {card ? "Edit contact" : "Add contact"}
@@ -333,6 +338,9 @@ export function CardDialog({
             </span>
           </label>
         )}
+
+        {/* Only when editing: a contact being created has no history yet. */}
+        {card && <ContactSubmissions cardId={card._id} />}
 
         <div className="flex justify-end gap-2 pt-1">
           <button

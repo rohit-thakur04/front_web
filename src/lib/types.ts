@@ -177,6 +177,30 @@ export interface FormField {
   html?: string;
 }
 
+/**
+ * One answer a visitor gave, with the question as it was worded at the time.
+ *
+ * The label and type are copies, not references into the form. A form edited
+ * after a submission arrived must not relabel history, which is exactly what
+ * reading the live form definition would do.
+ */
+export interface FormAnswer {
+  fieldId: string;
+  label: string;
+  type: string;
+  value: string;
+}
+
+/** One completed form, linked to the contact it created when one was created. */
+export interface FormSubmission {
+  _id: string;
+  formId: string;
+  formName: string;
+  answers: FormAnswer[];
+  cardId?: string | null;
+  createdAt: string;
+}
+
 export interface FormStyles {
   pageBackground: string;
   formCard: string;
