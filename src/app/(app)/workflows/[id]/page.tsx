@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type {
   CatalogItem,
   EmailTemplate,
+  PublishProblem,
   WabaTemplate,
   Workflow,
   WorkflowActivity,
@@ -159,10 +160,14 @@ export default function WorkflowBuilderPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
 
+  // Why a publish was refused, listed under the top bar until it is fixed.
+  const [blockers, setBlockers] = useState<PublishProblem[]>([]);
+
   async function save(nextStatus?: "draft" | "published") {
     if (!wf) return;
     setSaving(true);
     setError("");
+    setBlockers([]);
     try {
       const body = {
         name: wf.name,
@@ -175,6 +180,11 @@ export default function WorkflowBuilderPage() {
       setWf(saved);
       setDirty(false);
     } catch (e) {
+      // 422 is the pre-flight refusal: the server lists what is unconfigured
+      // rather than publishing something that would silently do nothing.
+      if (e instanceof ApiError && e.status === 422 && Array.isArray(e.detail?.problems)) {
+        setBlockers(e.detail.problems as PublishProblem[]);
+      }
       setError(e instanceof Error ? e.message : "Could not save");
     } finally {
       setSaving(false);
@@ -238,8 +248,46 @@ export default function WorkflowBuilderPage() {
         </div>
       </div>
 
-      {error && (
+      {error && blockers.length === 0 && (
         <p className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
+      )}
+
+      {/* Shown instead of the generic error when the publish was refused: the
+          whole point is the list, not the sentence. Every problem appears at
+          once, because fixing them one publish attempt at a time is the slow
+          way to learn the same thing. */}
+      {blockers.length > 0 && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5">
+          <div className="flex items-start gap-2">
+            <span aria-hidden="true" className="mt-0.5 text-amber-600">▲</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-amber-900">
+                Not published — {blockers.length} thing
+                {blockers.length === 1 ? "" : "s"} to fix first
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {blockers.map((b, i) => (
+                  <li key={b.stepId || i} className="text-sm text-amber-800">
+                    {b.label && <span className="font-medium">{b.label}: </span>}
+                    {b.reason}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-amber-700">
+                Your changes were not saved. Fix these and publish again, or press
+                Save to keep it as a draft.
+              </p>
+            </div>
+            <button
+              onClick={() => setBlockers([])}
+              aria-label="Dismiss"
+              title="Dismiss"
+              className="rounded p-1 text-amber-500 hover:bg-amber-100 hover:text-amber-800"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-1 overflow-hidden">
@@ -810,19 +858,31 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // Colors + icons for each activity action.
+/*
+ * Every state gets its own glyph, not just its own colour.
+ *
+ * A skipped send used to carry the same ✉ or ◆ as a successful one and differed
+ * only in hue, so a dry-run notice read as an ordinary informational line. The
+ * glyph now says what happened before colour is considered at all — which is
+ * also the only version that works for a colour-blind reader.
+ */
 const ACTIVITY_STYLE: Record<string, { icon: string; cls: string }> = {
   enrolled: { icon: "→", cls: "text-slate-600" },
   email_sent: { icon: "✉", cls: "text-emerald-600" },
-  email_failed: { icon: "✉", cls: "text-rose-600" },
-  email_skipped: { icon: "✉", cls: "text-amber-600" },
+  email_failed: { icon: "✕", cls: "text-rose-600" },
+  email_skipped: { icon: "▲", cls: "text-amber-600" },
   whatsapp_sent: { icon: "◆", cls: "text-emerald-600" },
-  whatsapp_failed: { icon: "◆", cls: "text-rose-600" },
-  whatsapp_skipped: { icon: "◆", cls: "text-amber-600" },
+  whatsapp_failed: { icon: "✕", cls: "text-rose-600" },
+  whatsapp_skipped: { icon: "▲", cls: "text-amber-600" },
   delay: { icon: "⏱", cls: "text-slate-500" },
   branch: { icon: "⑃", cls: "text-blue-600" },
   completed: { icon: "✓", cls: "text-emerald-700" },
+  // A run that finished with steps that never ran is not a success. It used to
+  // show the same green tick as a clean run, which is how you demo a WhatsApp
+  // workflow that has never sent a message and see nothing but ticks.
+  completed_with_issues: { icon: "▲", cls: "text-amber-700" },
   failed: { icon: "✕", cls: "text-rose-600" },
-  skipped: { icon: "–", cls: "text-amber-600" },
+  skipped: { icon: "▲", cls: "text-amber-600" },
 };
 
 // ActivityDrawer shows the recent run timeline for this workflow: which contacts

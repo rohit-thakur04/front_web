@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { mapRows, parseCSV, parseMoney, phoneKey, toCSV } from "./csv";
+import {
+  mapRows,
+  neutralizeFormula,
+  parseCSV,
+  parseMoney,
+  phoneKey,
+  toCSV,
+} from "./csv";
 
 describe("parseCSV", () => {
   it("parses a plain grid", () => {
@@ -217,5 +224,48 @@ describe("mapRows duplicate handling", () => {
       ["B", "9876543210", ""],
     ]);
     expect(res.rows).toHaveLength(2);
+  });
+});
+
+describe("neutralizeFormula", () => {
+  it("defuses every character a spreadsheet treats as a formula", () => {
+    for (const lead of ["=", "+", "-", "@", "\t", "\r"]) {
+      expect(neutralizeFormula(lead + "cmd")).toBe("'" + lead + "cmd");
+    }
+  });
+
+  it("leaves ordinary values alone", () => {
+    for (const v of ["Asha Patel", "9876543210", "", "a=b", "Priya (Sales)"]) {
+      expect(neutralizeFormula(v)).toBe(v);
+    }
+  });
+
+  it("does not double-prefix a value that is already quoted off", () => {
+    expect(neutralizeFormula("'=1+1")).toBe("'=1+1");
+  });
+});
+
+describe("toCSV formula injection", () => {
+  it("defuses a malicious contact name that came from the public form", () => {
+    // That endpoint is unauthenticated, so the name is attacker-chosen — and it
+    // executes on the client's machine when they open their own export.
+    const csv = toCSV(["Name"], ['=HYPERLINK("http://evil.example")'].map((n) => [n]));
+    expect(csv).toContain("'=HYPERLINK");
+    // No cell may begin with a bare "=", whether at a comma or inside quotes.
+    expect(csv).not.toMatch(/(^|,|")=/);
+  });
+
+  it("still quotes a defused value that contains a comma", () => {
+    expect(toCSV(["Name"], [["=1+1,2"]])).toContain('"' + "'=1+1,2" + '"');
+  });
+
+  it("keeps the UTF-8 BOM so Excel renders rupees and Devanagari", () => {
+    // The QA report claimed this was missing; it is not, and this pins it.
+    expect(toCSV(["Name"], [["\u0906\u0936\u093e"]]).charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it("writes a real amount untouched and defuses a text one", () => {
+    expect(toCSV(["Value"], [[5000]])).toContain("5000");
+    expect(toCSV(["Value"], [["-5000"]])).toContain("'-5000");
   });
 });

@@ -72,8 +72,14 @@ export function AppStore() {
   }
 
   const smtpConnected = smtpConns.some((c) => c.isDefault);
+  // Counts only connections that actually work, so the number at the top of the
+  // page agrees with the badges underneath it.
   const connectedCount =
-    connections.filter((c) => c.status === "connected").length + (smtpConnected ? 1 : 0);
+    connections.filter((c) => c.status === "connected" && c.usable !== false).length +
+    (smtpConnected ? 1 : 0);
+  const brokenCount = connections.filter(
+    (c) => c.status === "connected" && c.usable === false,
+  ).length;
 
   if (loading) return <p className="p-6 text-sm text-slate-500">Loading…</p>;
 
@@ -96,6 +102,14 @@ export function AppStore() {
         verify them against the provider yet.
       </p>
 
+      {brokenCount > 0 && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {brokenCount} connection{brokenCount === 1 ? "" : "s"} can no longer be
+          read and {brokenCount === 1 ? "is" : "are"} not working. Enter the keys
+          again on the card{brokenCount === 1 ? "" : "s"} below.
+        </p>
+      )}
+
       {error && (
         <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
       )}
@@ -109,6 +123,20 @@ export function AppStore() {
                 const isSmtp = p.key === CUSTOM_SMTP;
                 const conn = byProvider[p.key];
                 const connected = isSmtp ? smtpConnected : conn?.status === "connected";
+                /*
+                 * Connected is not the same as working.
+                 *
+                 * `status` is a string written once when the keys were saved, and
+                 * it keeps saying "connected" after the stored secrets have
+                 * stopped being decryptable — most often because JWT_SECRET
+                 * changed, since it doubles as the encryption key. The server now
+                 * actually opens each connection and reports `usable`, so this
+                 * card can stop claiming something it has not checked.
+                 *
+                 * Without this the App Store said WhatsApp was connected while
+                 * WhatsApp Templates said it was not, and both were right.
+                 */
+                const broken = !isSmtp && connected && conn?.usable === false;
                 return (
                   <div key={p.key} className="flex flex-col rounded-xl border border-slate-200 bg-white p-4">
                     <div className="mb-2 flex items-start justify-between">
@@ -125,7 +153,10 @@ export function AppStore() {
                     <p className="font-semibold">{p.name}</p>
                     <p className="mt-1 flex-1 text-sm text-slate-500">{p.description}</p>
 
-                    {/* Masked hints for a connected provider. */}
+                    {/* Masked hints for a connected provider. These come from
+                        plaintext display hints, which is why they keep rendering
+                        perfectly for a connection that no longer works — hence
+                        the warning below them rather than trust in them. */}
                     {!isSmtp && connected && conn && (
                       <div className="mt-2 space-y-0.5">
                         {p.fields.map((f) => (
@@ -134,6 +165,14 @@ export function AppStore() {
                           </p>
                         ))}
                       </div>
+                    )}
+
+                    {broken && (
+                      <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                        These keys can no longer be read, so anything using this
+                        connection will fail. The values above are only a saved
+                        preview. Enter the keys again to reconnect.
+                      </p>
                     )}
 
                     {isSmtp && smtpConns.length > 0 && (
@@ -146,10 +185,23 @@ export function AppStore() {
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
                       <span
                         className={`inline-flex items-center gap-1 text-xs font-medium ${
-                          connected ? "text-emerald-600" : "text-slate-400"
+                          broken
+                            ? "text-amber-600"
+                            : connected
+                              ? "text-emerald-600"
+                              : "text-slate-400"
                         }`}
+                        title={
+                          broken
+                            ? "The saved keys can no longer be read. Enter them again to reconnect."
+                            : undefined
+                        }
                       >
-                        {connected ? "● Connected" : "○ Disconnected"}
+                        {broken
+                          ? "▲ Needs reconnecting"
+                          : connected
+                            ? "● Connected"
+                            : "○ Disconnected"}
                       </span>
                       {isSmtp ? (
                         <button

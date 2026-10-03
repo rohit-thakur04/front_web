@@ -101,6 +101,13 @@ export interface Workflow {
   runCount?: number;
 }
 
+// One reason a workflow cannot be published yet, as the server reports it.
+export interface PublishProblem {
+  stepId: string;
+  label: string;
+  reason: string;
+}
+
 export interface CatalogItem {
   key: string;
   label: string;
@@ -134,6 +141,9 @@ export interface WorkflowActivity {
     | "delay"
     | "branch"
     | "completed"
+    // A run that finished with steps that never ran. Distinct from "completed"
+    // so the timeline cannot present it as a clean success.
+    | "completed_with_issues"
     | "failed"
     | "skipped";
   detail: string;
@@ -266,6 +276,15 @@ export interface Integration {
   ownerId: string;
   provider: string;
   status: "connected" | "disconnected";
+  /**
+   * Whether the stored keys can still be decrypted and used.
+   *
+   * Derived per request, so it is the only trustworthy signal here: `status` is
+   * a string written once at connect time and keeps reading "connected" after
+   * the secrets have stopped working. Optional because an older API build does
+   * not send it, and absent must not be read as broken.
+   */
+  usable?: boolean;
   hints: Record<string, string>;
   connectedAt: string | null;
   createdAt: string;

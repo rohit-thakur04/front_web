@@ -40,9 +40,20 @@ export function clearToken() {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * The rest of the error body, when the endpoint sent one.
+   *
+   * Some refusals are lists rather than sentences — publishing a workflow with
+   * three unconfigured steps should name all three, not just say no. Collapsing
+   * the body to `message` threw that away and left the UI with nothing specific
+   * to show.
+   */
+  detail?: Record<string, unknown>;
+
+  constructor(status: number, message: string, detail?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.detail = detail;
     this.name = "ApiError";
   }
 }
@@ -83,14 +94,16 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+let message = `Request failed (${res.status})`;
+    let detail: Record<string, unknown> | undefined;
     try {
       const data = await res.json();
       if (data?.message) message = data.message;
+      if (data && typeof data === "object") detail = data as Record<string, unknown>;
     } catch {
       // Non-JSON error body; keep the generic message.
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, detail);
   }
 
   if (res.status === 204) return undefined as T;
