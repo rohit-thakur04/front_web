@@ -34,7 +34,13 @@ interface NavItem {
 // Grouped like the reference, but wired to the features this app actually has.
 const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
   {
-    items: [{ href: "/dashboard", label: "Dashboard", icon: "Dashboard", feature: "dashboard" }],
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "Dashboard", feature: "dashboard" },
+      // Sits beside the Dashboard rather than under Pipeline on purpose. The
+      // dashboard says how things are going; this says what to do next, which
+      // is the question somebody opens the product with.
+      { href: "/needs-attention", label: "Needs Attention", icon: "Bell", feature: "pipeline" },
+    ],
   },
   {
     heading: "Lead Generation",
