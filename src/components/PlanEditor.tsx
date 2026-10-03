@@ -459,17 +459,11 @@ function FeaturesTab({
       {/* Usage limits */}
       <div>
         <h3 className="mb-2 text-sm font-semibold">Usage Limits</h3>
+        <p className="mb-2 text-xs text-slate-500">
+          0 means unlimited. Every limit here is checked by the API, not just the
+          screen, so a client cannot go past it by calling the endpoint directly.
+        </p>
         <div className="space-y-2">
-          <div>
-            <label className="mb-1 block text-sm">Monthly Email Limit</label>
-            <input
-              type="number"
-              min={0}
-              value={limits.monthlyEmailLimit}
-              onChange={(e) => patch({ limits: { ...limits, monthlyEmailLimit: Number(e.target.value) || 0 } })}
-              className="input w-40"
-            />
-          </div>
           <LimitRow
             label="Staff Members"
             hint="Max team members (0 = unlimited)"
@@ -482,10 +476,62 @@ function FeaturesTab({
             value={limits.maxContacts}
             onChange={(v) => patch({ limits: { ...limits, maxContacts: v } })}
           />
+          {/* Both of these were in the data model and in the API's defaults, but
+              had no field here — so an admin could not set them even though the
+              plan carried them. */}
+          <LimitRow
+            label="Pipelines"
+            hint="Max pipelines on the board (0 = unlimited)"
+            value={limits.maxPipelines}
+            onChange={(v) => patch({ limits: { ...limits, maxPipelines: v } })}
+          />
+          <LimitRow
+            label="Email Templates"
+            hint="Max templates across all stages (0 = unlimited)"
+            value={limits.maxTemplates}
+            onChange={(v) => patch({ limits: { ...limits, maxTemplates: v } })}
+          />
+        </div>
+
+        {/* Saved, but nothing reads them back yet. Shown separately and labelled,
+            because a control that looks identical to an enforced one and quietly
+            does nothing is how a plan gets sold on a promise the product does not
+            keep. */}
+        <h3 className="mb-2 mt-5 text-sm font-semibold">
+          Not enforced yet{" "}
+          <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+            Saved, not applied
+          </span>
+        </h3>
+        <p className="mb-2 text-xs text-slate-500">
+          These are stored on the plan and will be honoured once the work behind
+          them lands. Setting them changes nothing today.
+        </p>
+        <div className="space-y-2 opacity-80">
+          <div className="rounded-lg border border-slate-200 p-3">
+            <label className="mb-1 block text-sm font-medium" htmlFor="plan-email-limit">
+              Monthly Email Limit
+            </label>
+            <p className="mb-1.5 text-xs text-slate-500">
+              Needs per-tenant send counting, which arrives with the move off the
+              shared mail account.
+            </p>
+            <input
+              id="plan-email-limit"
+              type="number"
+              min={0}
+              value={limits.monthlyEmailLimit}
+              onChange={(e) => patch({ limits: { ...limits, monthlyEmailLimit: Number(e.target.value) || 0 } })}
+              className="input w-40"
+            />
+          </div>
           <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
             <div>
               <p className="text-sm font-medium">White Label</p>
-              <p className="text-xs text-slate-500">Enable white-label branding for this client</p>
+              <p className="text-xs text-slate-500">
+                Enable white-label branding for this client. Nothing is branded
+                per client yet, so there is nothing for this to switch.
+              </p>
             </div>
             <Toggle checked={limits.whiteLabel} onChange={(v) => patch({ limits: { ...limits, whiteLabel: v } })} />
           </div>
