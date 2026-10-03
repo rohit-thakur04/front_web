@@ -25,6 +25,14 @@ export default function PublicFormPage() {
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<PublicForm | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  /*
+   * Honeypot. Hidden from people, left empty by them; a bot that fills every
+   * input it finds fills this one too and the server discards the submission.
+   *
+   * Kept in state rather than read from the DOM on submit so it travels with the
+   * request like any other field, and so nothing has to query for it.
+   */
+  const [honeypot, setHoneypot] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
@@ -50,7 +58,7 @@ export default function PublicFormPage() {
     try {
       await api(`/public/forms/${id}/submit`, {
         method: "POST",
-        body: { answers: values },
+        body: { answers: values, website: honeypot },
       });
       setDone(true);
     } catch (err) {
@@ -147,6 +155,23 @@ export default function PublicFormPage() {
       )}
 
       <form onSubmit={submit}>
+        {/* Hidden with CSS rather than type="hidden": a bot reading the markup
+            skips an input it can tell is hidden, and type="hidden" announces
+            itself. aria-hidden and tabIndex keep it away from screen readers and
+            the tab order, so nobody using the form can reach it by accident.
+            autoComplete="off" stops a browser helpfully filling it in. */}
+        <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
+          <label htmlFor="website">Leave this field empty</label>
+          <input
+            id="website"
+            name="website"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
+        </div>
         {form.fields.map((f) =>
           // A content block is markup, not a question: no label, no asterisk,
           // and nothing added to `values`, so it never reaches the submission.

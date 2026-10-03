@@ -33,16 +33,40 @@ export function AutomationBadge({ progress, templateCount, intervalHours }: Prop
 
   if (progress.status === "stopped") {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
-        ⏸ Stopped · day {progress.currentDay}
+      <span
+        title="This stage's follow-up was stopped when the contact moved on."
+        className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+      >
+        ⏸ Stopped after day {progress.currentDay}
       </span>
     );
   }
 
   if (progress.status === "completed") {
+    /*
+     * A stage with no templates "completes" the instant a card enters it, so a
+     * green tick here would be claiming a lead had been fully nurtured when
+     * nothing was ever sent to them.
+     *
+     * That is exactly what happened to a lead moved mid-sequence: the old
+     * stage's run was stopped at Day 1, the new stage had no templates, and the
+     * card read "Sequence complete" to anyone glancing at the board. A wrong
+     * signal is more dangerous than no signal — before this it merely showed
+     * nothing.
+     */
+    if (templateCount === 0) {
+      return (
+        <span
+          title="This stage has no email templates, so there is nothing to send here."
+          className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500"
+        >
+          — No sequence in this stage
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-        ✓ Sequence complete
+        ✓ Sequence complete · {templateCount} sent
       </span>
     );
   }
