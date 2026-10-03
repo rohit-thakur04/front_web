@@ -17,7 +17,7 @@ import type {
 import { CatalogPicker } from "@/components/workflow/CatalogPicker";
 import {
   ROOT,
-  addToContainer,
+  insertIntoContainer,
   containerId,
   findStep,
   removeStep,
@@ -42,7 +42,12 @@ export default function WorkflowBuilderPage() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
 
   // Picker: either choosing the trigger, or adding a step to a container.
-  const [picker, setPicker] = useState<{ mode: "trigger" | "step"; container?: string } | null>(
+  const [picker, setPicker] = useState<{
+    mode: "trigger" | "step";
+    container?: string;
+    /** Position within the container. Undefined appends, as it always did. */
+    index?: number;
+  } | null>(
     null,
   );
   // Config panel selection: the trigger, or a step by id.
@@ -105,7 +110,9 @@ export default function WorkflowBuilderPage() {
         // Only forking steps (If/Else) get Yes/No branches.
         ...(item.branches ? { yes: [], no: [] } : {}),
       };
-      patch({ steps: addToContainer(wf.steps, picker.container ?? ROOT, step) });
+      patch({
+        steps: insertIntoContainer(wf.steps, picker.container ?? ROOT, step, picker.index),
+      });
       setSelected({ kind: "step", id: step.id });
     }
     setPicker(null);
@@ -346,7 +353,7 @@ export default function WorkflowBuilderPage() {
               selectedId={selected?.kind === "step" ? selected.id : undefined}
               onSelect={(sid) => setSelected({ kind: "step", id: sid })}
               onDelete={deleteStep}
-              onAdd={(c) => setPicker({ mode: "step", container: c })}
+              onAdd={(c, index) => setPicker({ mode: "step", container: c, index })}
             />
           </div>
         </div>
@@ -395,6 +402,46 @@ function Connector() {
   return <div className="my-1 h-6 w-px bg-slate-300" />;
 }
 
+/**
+ * The line between two steps, with a "+" sitting on it.
+ *
+ * Hidden until the connector is hovered, because a workflow of a dozen steps with
+ * a permanent button in every gap reads as a form rather than a sequence. Three
+ * exceptions to that, all deliberate:
+ *
+ *  - It appears on keyboard focus, so it is reachable by tabbing rather than
+ *    being a mouse-only feature.
+ *  - It is always visible where the device has no hover at all, since on a phone
+ *    an element that only exists on hover does not exist.
+ *  - The hit area is the full width of the connector, not the 20px circle, so
+ *    the gap is forgiving to aim at.
+ */
+function InsertConnector({
+  onInsert,
+  label,
+}: {
+  onInsert: () => void;
+  label: string;
+}) {
+  return (
+    <div className="group relative flex h-7 w-full items-center justify-center">
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-300"
+      />
+      <button
+        type="button"
+        onClick={onInsert}
+        title={label}
+        aria-label={label}
+        className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-xs leading-none text-slate-400 opacity-0 shadow-sm transition hover:border-blue-400 hover:text-blue-600 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-60"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 function StepTree({
   steps,
   container,
@@ -412,15 +459,21 @@ function StepTree({
   selectedId?: string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
-  onAdd: (container: string) => void;
+  onAdd: (container: string, index?: number) => void;
 }) {
   return (
     <div className="flex w-full flex-col items-center">
-      {steps.map((s) => {
+      {steps.map((s, i) => {
         const branches = itemByKey[s.type]?.branches;
         return (
           <div key={s.id} className="flex w-full flex-col items-center">
-            <Connector />
+            {/* The line above each step doubles as an insert point, so a step
+                can be added between two existing ones. Appending was the only
+                option before, which meant deleting the tail and rebuilding it. */}
+            <InsertConnector
+              label={`Insert a step before ${s.label || "this step"}`}
+              onInsert={() => onAdd(container, i)}
+            />
             <StepNode
               step={s}
               item={itemByKey[s.type]}
@@ -465,7 +518,8 @@ function StepTree({
       })}
 
       {/* Add button for this container (hidden inside condition branches, which
-          render their own add button below the branch steps). */}
+          render their own add button below the branch steps). No index: this one
+          appends, which is what the end of a sequence means. */}
       {!container.includes(":") && (
         <>
           <Connector />
