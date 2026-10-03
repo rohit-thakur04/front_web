@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
 import { ClientEditDialog } from "@/components/ClientEditDialog";
+import { ClientRowMenu } from "@/components/ClientRowMenu";
+import { ClientDetailDialog } from "@/components/ClientDetailDialog";
+import { ClientDeleteDialog } from "@/components/ClientDeleteDialog";
+import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth";
 import type { Plan, Role, User } from "@/lib/types";
 import { PageHeader, StatTile } from "@/components/ui";
@@ -39,6 +43,9 @@ export default function ClientsPage() {
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   // The account being edited, or null when the dialog is closed.
   const [editing, setEditing] = useState<User | null>(null);
+  const [viewing, setViewing] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
+  const [notice, setNotice] = useState("");
 
   // Route guard. The API enforces admin independently — this only keeps a
   // non-admin from seeing a broken page.
@@ -67,6 +74,40 @@ export default function ClientsPage() {
     }
     run();
   }, [isAdmin]);
+
+  /*
+   * Deactivate or reactivate, straight from the row menu.
+   *
+   * Confirmed first, because it takes someone's access away and the menu it is
+   * launched from is one slip of the mouse wide. Reactivating is harmless, so it
+   * goes through without asking.
+   */
+  async function toggleActive(u: User) {
+    const turningOff = !u.disabled;
+    if (
+      turningOff &&
+      !window.confirm(
+        `Deactivate ${u.name}? They won't be able to sign in. Nothing of theirs is deleted.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await api(`/auth/users/${u._id}`, {
+        method: "PATCH",
+        body: { disabled: turningOff },
+      });
+      await load();
+      flash(turningOff ? `${u.name} can no longer sign in.` : `${u.name} is active again.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update the account");
+    }
+  }
+
+  function flash(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 4000);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -276,66 +317,131 @@ export default function ClientsPage() {
         </form>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {notice && (
+        <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {notice}
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Role</th>
+              <th className="w-10 px-3 py-2">#</th>
+              <th className="px-3 py-2">Account</th>
+              <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Plan</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u._id} className="border-b border-slate-100 last:border-0">
-                <td className="px-3 py-2 font-medium">
-                  {u.name}
-                  {u.disabled && (
-                    // Worth seeing in the list: a deactivated account looks
-                    // identical to an active one otherwise, and the usual
-                    // question about it is "why can't they log in?".
-                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-                      inactive
+            {users.map((u, i) => (
+              <tr key={u._id} className="border-b border-slate-100 align-top last:border-0">
+                <td className="px-3 py-3 text-slate-400">{i + 1}</td>
+
+                {/* Name, how to reach them, and the reference an admin quotes
+                    back on a support thread — one cell, because they are read
+                    together. */}
+                <td className="px-3 py-3">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
+                      {initial(u.name)}
                     </span>
+                    <div className="min-w-0">
+                      <p className="font-medium">{u.name}</p>
+                      <p className="truncate text-xs text-slate-500">{u.email}</p>
+                      {u.phone && <p className="text-xs text-slate-500">{u.phone}</p>}
+                      <CopyableCode value={accountCode(u._id)} />
+                    </div>
+                  </div>
+                </td>
+
+                <td className="px-3 py-3">
+                  <StatusPill user={u} />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Created {new Date(u.createdAt).toLocaleDateString()}
+                  </p>
+                  {/* Only shown once it exists. "Last login: never" on an
+                      account made this morning is noise, not information. */}
+                  {u.lastLoginAt && (
+                    <p className="text-xs text-slate-400">
+                      Last login {new Date(u.lastLoginAt).toLocaleDateString()}
+                    </p>
                   )}
                 </td>
-                <td className="px-3 py-2 text-slate-600">{u.email}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                      u.role === "admin"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {u.role}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-slate-600">
+
+                <td className="px-3 py-3">
                   {u.role === "admin" ? (
-                    <span className="text-slate-400">— full</span>
+                    <span className="text-slate-400">— full access</span>
                   ) : u.planId ? (
-                    plans.find((p) => p._id === u.planId)?.name ?? "unknown"
+                    <>
+                      <p className="text-slate-700">
+                        {plans.find((p) => p._id === u.planId)?.name ?? "unknown plan"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {u.workflowLimit
+                          ? `${u.workflowLimit} workflows`
+                          : "Unlimited workflows"}
+                      </p>
+                    </>
                   ) : (
-                    <span className="text-slate-400">no plan</span>
+                    <>
+                      <span className="text-slate-400">no plan</span>
+                      {/* Worth saying: an unassigned account is not restricted,
+                          it is unrestricted, which is the opposite of what "no
+                          plan" sounds like. */}
+                      <p className="mt-0.5 text-xs text-amber-600">
+                        Every feature, no limits
+                      </p>
+                    </>
                   )}
                 </td>
-                <td className="px-3 py-2 text-slate-500">
-                  {new Date(u.createdAt).toLocaleDateString()}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
-                  <RowActions>
-                    <RowAction action="edit" label="Edit account" onClick={() => setEditing(u)} />
-                  </RowActions>
+
+                <td className="px-3 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <RowActions>
+                      <RowAction action="open" label="View details" onClick={() => setViewing(u)} />
+                      <RowAction action="edit" label="Edit account" onClick={() => setEditing(u)} />
+                    </RowActions>
+                    <ClientRowMenu
+                      user={u}
+                      onView={() => setViewing(u)}
+                      onEdit={() => setEditing(u)}
+                      onChangePlan={() => setEditing(u)}
+                      onToggleActive={() => toggleActive(u)}
+                      onDelete={() => setDeleting(u)}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {viewing && (
+        <ClientDetailDialog
+          user={viewing}
+          plans={plans}
+          onClose={() => setViewing(null)}
+          onEdit={() => {
+            setEditing(viewing);
+            setViewing(null);
+          }}
+        />
+      )}
+
+      {deleting && (
+        <ClientDeleteDialog
+          user={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={async (removed) => {
+            setDeleting(null);
+            await load();
+            flash(`Account deleted, along with ${removed.toLocaleString()} of their records.`);
+          }}
+        />
+      )}
 
       {editing && (
         <ClientEditDialog
@@ -349,5 +455,85 @@ export default function ClientsPage() {
         />
       )}
     </div>
+  );
+}
+
+/** The initial shown in the avatar. Falls back so a blank name is still a circle. */
+function initial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "?";
+}
+
+/**
+ * A short, stable reference for an account.
+ *
+ * Derived from the id's last characters rather than stored, so it needs no
+ * migration and cannot drift from the record. It exists to be quoted — read down
+ * a phone line, pasted into a support thread — which is why it is six characters
+ * and not a 24-character ObjectID.
+ *
+ * It is a convenience, never an identifier: everything the app does still goes
+ * through the real id.
+ */
+function accountCode(id: string): string {
+  return "A" + id.slice(-5).toUpperCase();
+}
+
+/** The code, with a one-click copy — because the point of it is being quoted. */
+function CopyableCode({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          // Clipboard refused (no permission, insecure origin). The code is on
+          // screen either way, so there is nothing to recover from.
+        }
+      }}
+      title="Copy account reference"
+      className="mt-1 inline-flex items-center gap-1 rounded text-xs text-slate-400 transition hover:text-slate-700"
+    >
+      <span className="font-mono">{value}</span>
+      {copied ? <span className="text-emerald-600">copied</span> : <Icon.Copy width={12} height={12} />}
+    </button>
+  );
+}
+
+/**
+ * Whether this account can currently be used.
+ *
+ * The reference design showed Active / Overdue, which is billing state. There is
+ * no subscription record in this product — no start date, no renewal, no payment
+ * — so reporting "Overdue" would be inventing a fact. This reports the one thing
+ * that is true and does matter: whether they can sign in.
+ */
+function StatusPill({ user }: { user: User }) {
+  if (user.disabled) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+        <Icon.Ban width={13} height={13} />
+        Deactivated
+      </span>
+    );
+  }
+  if (!user.lastLoginAt) {
+    // Distinct from Active on purpose: an account created weeks ago that has
+    // never been used is usually a password that was never passed on.
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+        <Icon.Clock width={13} height={13} />
+        Never signed in
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+      <Icon.CheckCircle width={13} height={13} />
+      Active
+    </span>
   );
 }

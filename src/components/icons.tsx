@@ -191,6 +191,37 @@ export const Icon = {
       <rect x="17" y="4" width="4" height="7" rx="1" />
     </svg>
   ),
+  Dots: (p: IconProps) => (
+    <svg {...base(p)}>
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  ),
+  Copy: (p: IconProps) => (
+    <svg {...base(p)}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  ),
+  Clock: (p: IconProps) => (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  ),
+  CheckCircle: (p: IconProps) => (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </svg>
+  ),
+  Ban: (p: IconProps) => (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.6 5.6 12.8 12.8" />
+    </svg>
+  ),
 } as const;
 
 export type IconName = keyof typeof Icon;
