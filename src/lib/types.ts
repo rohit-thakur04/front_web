@@ -606,6 +606,16 @@ export interface WabaTemplate {
 
 // --- Short URLs (lead-generation attribution) -----------------------------
 
+/** One target in a rotating short link. */
+export interface LinkDestination {
+  url: string;
+  label: string;
+  /** This destination's share of the clicks. Blank or zero counts as one. */
+  weight: number;
+  /** This destination's own tally, so you can see which one got the traffic. */
+  clicks: number;
+}
+
 export interface ShortURL {
   _id: string;
   ownerId: string;
@@ -614,6 +624,12 @@ export interface ShortURL {
   targetUrl: string;
   title: string;
   campaign: string;
+  /**
+   * When there is more than one, clicks are split between them by weight and
+   * targetUrl is just the first one. Absent on an ordinary single-target link,
+   * which is what every link created before rotation is.
+   */
+  destinations?: LinkDestination[] | null;
   clicks: number;
   lastClickedAt?: string | null;
   /** The whole link to hand out, resolved server-side. See Funnel.publicUrl. */

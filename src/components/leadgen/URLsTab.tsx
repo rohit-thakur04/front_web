@@ -32,6 +32,16 @@ export function URLsTab() {
   const [title, setTitle] = useState("");
   const [campaign, setCampaign] = useState("");
   const [code, setCode] = useState("");
+  /*
+   * Extra destinations, beyond the first. Held separately from `target` so the
+   * ordinary case — one link, one destination — is unchanged and the rotation
+   * fields only exist once somebody asks for them.
+   */
+  const [extras, setExtras] = useState<{ url: string; label: string; weight: string }[]>([]);
+  // The first destination's share. Separate because its URL is the main field
+  // above, but it still needs a weight or a rotation can only ever favour the
+  // destinations added second.
+  const [primaryWeight, setPrimaryWeight] = useState("1");
 
   async function load() {
     try {
@@ -58,9 +68,30 @@ export function URLsTab() {
     setSaving(true);
     setError("");
     try {
+      /*
+       * Sent only when there is something to rotate between. One destination is
+       * an ordinary link, and posting a single-entry rotation would make every
+       * link in the list claim to be a rotator.
+       */
+      const filled = extras.filter((d) => d.url.trim() !== "");
+      // Blank or unparseable means an equal share. The server floors anything
+      // below 1 as well, so a destination can never end up starved.
+      const share = (w: string) => Number(w) || 1;
+      const destinations =
+        filled.length > 0
+          ? [
+              { url: target, label: title, weight: share(primaryWeight) },
+              ...filled.map((d) => ({
+                url: d.url,
+                label: d.label,
+                weight: share(d.weight),
+              })),
+            ]
+          : undefined;
+
       const link = await api<ShortURL>("/urls", {
         method: "POST",
-        body: { targetUrl: target, title, campaign, code },
+        body: { targetUrl: target, title, campaign, code, destinations },
       });
       // Prepend rather than refetch: the list is sorted newest-first anyway.
       setLinks((prev) => [link, ...prev]);
@@ -68,6 +99,8 @@ export function URLsTab() {
       setTitle("");
       setCampaign("");
       setCode("");
+      setExtras([]);
+      setPrimaryWeight("1");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the link");
     } finally {
@@ -141,6 +174,105 @@ export function URLsTab() {
           />
         </div>
 
+        {/* Rotation. Hidden behind a single button until wanted, so the common
+            case stays a three-field form. */}
+        <div className="sm:col-span-2">
+          {extras.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setExtras([{ url: "", label: "", weight: "1" }])}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              + Split clicks between several destinations
+            </button>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="mb-2 text-sm font-medium">Rotate between destinations</p>
+              <p className="mb-3 text-xs text-slate-500">
+                Clicks are shared out in proportion to the weights — two sales reps on 1 and 1
+                get half each, and 3 against 1 sends three quarters to the first. The URL above
+                is the first destination.
+              </p>
+
+              <div className="space-y-2">
+                {/* The destination from the field above, shown here so its
+                    share is adjustable alongside the others rather than
+                    silently fixed at one. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="input min-w-0 flex-1 truncate bg-white text-slate-500">
+                    {target || "the destination URL above"}
+                  </span>
+                  <span className="w-28 text-xs text-slate-400">first</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={primaryWeight}
+                    onChange={(e) => setPrimaryWeight(e.target.value)}
+                    title="Share of the clicks"
+                    className="input w-16"
+                  />
+                  <span className="w-[26px]" />
+                </div>
+
+                {extras.map((d, i) => (
+                  <div key={i} className="flex flex-wrap items-start gap-2">
+                    <input
+                      value={d.url}
+                      onChange={(e) =>
+                        setExtras((prev) =>
+                          prev.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)),
+                        )
+                      }
+                      placeholder="https://example.com/rep-two"
+                      className="input min-w-0 flex-1"
+                    />
+                    <input
+                      value={d.label}
+                      onChange={(e) =>
+                        setExtras((prev) =>
+                          prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
+                        )
+                      }
+                      placeholder="Label"
+                      className="input w-28"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      value={d.weight}
+                      onChange={(e) =>
+                        setExtras((prev) =>
+                          prev.map((x, j) => (j === i ? { ...x, weight: e.target.value } : x)),
+                        )
+                      }
+                      title="Share of the clicks"
+                      className="input w-16"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setExtras((prev) => prev.filter((_, j) => j !== i))}
+                      aria-label="Remove this destination"
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-500 hover:text-rose-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setExtras((prev) => [...prev, { url: "", label: "", weight: "1" }])
+                }
+                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                + Add another
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium">Custom code</label>
           <input
@@ -203,8 +335,29 @@ export function URLsTab() {
                     </span>
                     {l.title && <p className="text-xs text-slate-500">{l.title}</p>}
                   </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-slate-600" title={l.targetUrl}>
-                    {l.targetUrl}
+                  <td className="max-w-xs px-4 py-3 text-slate-600">
+                    {l.destinations && l.destinations.length > 1 ? (
+                      /* The whole point of a rotator is which destination got
+                         what, so the per-destination tallies are the content
+                         here rather than a single URL that is only the first. */
+                      <div className="space-y-0.5">
+                        <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium">
+                          Rotating · {l.destinations.length}
+                        </span>
+                        {l.destinations.map((d, i) => (
+                          <p key={i} className="truncate text-xs" title={d.url}>
+                            {d.label || d.url}
+                            <span className="ml-1 text-slate-400">
+                              {d.clicks} click{d.clicks === 1 ? "" : "s"}
+                            </span>
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="block truncate" title={l.targetUrl}>
+                        {l.targetUrl}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.campaign || "—"}</td>
                   <td className="px-4 py-3 text-right font-medium">{l.clicks}</td>

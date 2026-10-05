@@ -77,6 +77,9 @@ const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
     items: [
       { href: "/plans", label: "Plans", icon: "Layers", adminOnly: true },
       { href: "/clients", label: "Clients", icon: "Shield", adminOnly: true },
+      // Beside Clients because that is where it gets used: capture a configured
+      // account, then start the next client from it.
+      { href: "/snapshots", label: "Snapshots", icon: "Layers", adminOnly: true },
     ],
   },
 ];
