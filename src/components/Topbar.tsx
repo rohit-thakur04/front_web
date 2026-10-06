@@ -29,7 +29,7 @@ export function Topbar({ onToggleSidebar }: Props) {
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] backdrop-blur-md">
       <button
         onClick={onToggleSidebar}
         className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
@@ -63,9 +63,9 @@ export function Topbar({ onToggleSidebar }: Props) {
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-2 hover:bg-slate-50"
+          className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-2 transition hover:border-slate-300 hover:bg-slate-50"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-semibold text-white ring-2 ring-white">
             {initial}
           </span>
           <span className="hidden text-sm font-medium sm:block">{user?.name}</span>
@@ -73,7 +73,7 @@ export function Topbar({ onToggleSidebar }: Props) {
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_32px_-8px_rgba(15,23,42,0.25)]">
             <div className="border-b border-slate-100 px-4 py-3">
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="truncate text-xs text-slate-500">{user?.email}</p>

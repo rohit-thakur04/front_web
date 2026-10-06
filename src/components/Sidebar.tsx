@@ -103,14 +103,17 @@ export function Sidebar({ open, onNavigate }: Props) {
       }`}
     >
       <div className="flex h-16 items-center gap-2 px-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-[0_2px_10px_-2px_rgba(37,99,235,0.6)]">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
             <path d="M12 3 3 20h18L12 3z" />
             <path d="M12 11 8 20M12 11l4 9" />
           </svg>
         </span>
-        <span className="text-lg font-bold tracking-tight">ARKQUEN</span>
+        <span className="text-lg font-bold tracking-[0.02em]">ARKQUEN</span>
       </div>
+      {/* Separates the brand from the nav without a full-width rule, which read
+          as the start of a section rather than the end of the header. */}
+      <div className="mx-5 border-b border-slate-100" />
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
         {NAV_GROUPS.map((group, gi) => {
@@ -125,7 +128,7 @@ export function Sidebar({ open, onNavigate }: Props) {
           return (
             <div key={gi}>
               {group.heading && (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                   {group.heading}
                 </p>
               )}
@@ -138,13 +141,24 @@ export function Sidebar({ open, onNavigate }: Props) {
                       key={item.href}
                       href={item.href}
                       onClick={onNavigate}
-                      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      aria-current={active ? "page" : undefined}
+                      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition duration-150 ${
                         active
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                          ? "bg-blue-600 text-white shadow-[0_2px_8px_-2px_rgba(37,99,235,0.5)]"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                       }`}
                     >
-                      <IconEl className={active ? "text-white" : "text-slate-400"} />
+                      {/* A rail on the active item, so position survives being
+                          read at a glance or in a screenshot where the blue
+                          fill and a hover tint look alike. */}
+                      {active && (
+                        <span className="absolute inset-y-1.5 -left-1 w-0.5 rounded-full bg-blue-600" />
+                      )}
+                      <IconEl
+                        className={`transition-transform duration-150 group-hover:scale-110 ${
+                          active ? "text-white" : "text-slate-400 group-hover:text-slate-600"
+                        }`}
+                      />
                       {item.label}
                     </Link>
                   );

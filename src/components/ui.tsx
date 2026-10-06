@@ -13,10 +13,13 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    /* A hairline under the header, so a page reads as a titled document rather
+       than a title that happens to sit above some panels. Appears on every
+       screen from this one place. */
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -33,7 +36,12 @@ export function Section({
 }) {
   return (
     <section className="mb-6">
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">{title}</h2>
+      {/* An eyebrow rather than a third weight of bold text. The page title,
+          the section and the tile labels were all competing at similar
+          strength, which left nothing leading the eye. */}
+      <h2 className="mb-3 text-xs font-semibold tracking-[0.06em] text-slate-500 uppercase">
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -70,15 +78,21 @@ export function StatTile({
   const IconEl = Icon[icon];
   const t = TONE[tone];
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 transition hover:shadow-sm">
+    <div className="group rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.12)]">
       <div className="flex items-start justify-between">
         <span className="text-sm text-slate-500">{label}</span>
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${t.bg} ${t.fg}`}>
+        <span
+          className={`flex h-9 w-9 items-center justify-center rounded-lg transition duration-200 group-hover:scale-105 ${t.bg} ${t.fg}`}
+        >
           <IconEl />
         </span>
       </div>
       <div className="mt-6 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tracking-tight">{value}</span>
+        {/* Tabular figures, so a row of tiles lines up on the digits instead of
+            jittering as the numbers change. */}
+        <span className="text-[1.75rem] font-semibold tracking-[-0.02em] tabular-nums">
+          {value}
+        </span>
         {badge && (
           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
             {badge}
@@ -106,12 +120,14 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
-        checked ? "bg-blue-600" : "bg-slate-300"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition duration-200 ${
+        checked ? "bg-blue-600" : "bg-slate-300 hover:bg-slate-400"
       }`}
     >
+      {/* Eased rather than linear: a switch that decelerates into place reads
+          as a physical thing being flipped. */}
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${
           checked ? "translate-x-5" : "translate-x-0.5"
         }`}
       />
@@ -128,7 +144,9 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white ${className}`}>
+    <div
+      className={`rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${className}`}
+    >
       {children}
     </div>
   );
