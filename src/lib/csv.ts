@@ -133,7 +133,107 @@ export function phoneKey(phone: string): string {
  * within the file by email OR phone — the same rule the server applies against
  * the target pipeline. See handlers.dedupeKeys for why it is skip, not update.
  */
-export function mapRows(grid: string[][]): ParseResult {
+/** A column that has not been assigned to any field. */
+export const UNMAPPED = -1;
+
+/**
+ * Which column in the file feeds which contact field, by index.
+ *
+ * UNMAPPED for anything the file does not provide. Held as indices rather than
+ * header names because two columns in an export can share a name, and the
+ * second one then becomes unreachable.
+ */
+export interface ColumnMapping {
+  name: number;
+  /**
+   * A separate surname column, appended to the name.
+   *
+   * Exports from other platforms split the name far more often than they
+   * combine it, and without this every one of those files imports as a list of
+   * first names.
+   */
+  lastName: number;
+  phone: number;
+  email: number;
+  value: number;
+  stage: number;
+}
+
+/*
+Header aliases, per field.
+
+Deliberately generous. These are the words other CRMs and WhatsApp tools
+actually print in their exports, and every one that is missing is a file
+somebody has to edit in Excel before this product will read it — which, for
+somebody migrating off a competitor, is the moment they stop migrating.
+*/
+const ALIASES: Record<keyof ColumnMapping, string[]> = {
+  name: [
+    "name", "full name", "fullname", "contact", "contact name", "first name",
+    "firstname", "given name", "lead name", "customer name", "client name",
+    "display name", "person",
+  ],
+  lastName: ["last name", "lastname", "surname", "family name", "second name"],
+  phone: [
+    "phone", "mobile", "phone number", "contact number", "mobile number",
+    "whatsapp", "whatsapp number", "contact no", "cell", "cell phone",
+    "telephone", "phone 1", "primary phone",
+  ],
+  email: [
+    "email", "email address", "e-mail", "e mail", "mail", "email 1",
+    "primary email", "work email",
+  ],
+  value: [
+    "value", "amount", "deal value", "price", "budget", "revenue",
+    "estimated value", "deal amount",
+  ],
+  stage: [
+    "stage", "stage name", "status", "column", "pipeline stage", "lead status",
+    "deal stage", "lead stage",
+  ],
+};
+
+/**
+ * detectMapping guesses a mapping from the header row.
+ *
+ * A guess, not a decision — the import dialog shows the result and lets it be
+ * corrected. That distinction is the whole point: the previous importer guessed
+ * silently and refused the file when it guessed wrong, which left no way
+ * forward at all for an export whose columns it did not recognise.
+ */
+export function detectMapping(header: string[]): ColumnMapping {
+  const lower = header.map((h) => h.trim().toLowerCase());
+  const find = (field: keyof ColumnMapping) => {
+    for (const alias of ALIASES[field]) {
+      const idx = lower.indexOf(alias);
+      if (idx !== -1) return idx;
+    }
+    return UNMAPPED;
+  };
+
+  const mapping: ColumnMapping = {
+    name: find("name"),
+    lastName: find("lastName"),
+    phone: find("phone"),
+    email: find("email"),
+    value: find("value"),
+    stage: find("stage"),
+  };
+
+  // "Name" and "Last name" both matching the same column means the file has one
+  // combined column; appending it to itself would read "Ada Ada".
+  if (mapping.lastName === mapping.name) mapping.lastName = UNMAPPED;
+
+  return mapping;
+}
+
+/**
+ * mapRows turns the raw grid into contact rows.
+ *
+ * The mapping is optional: omitted, it is detected from the header, which is
+ * what every caller did before mapping was adjustable.
+ */
+export function mapRows(grid: string[][], mapping?: ColumnMapping): ParseResult {
   const errors: ParseResult["errors"] = [];
   if (grid.length === 0) {
     return {
@@ -144,22 +244,11 @@ export function mapRows(grid: string[][]): ParseResult {
     };
   }
 
-  const header = grid[0].map((h) => h.trim().toLowerCase());
-  const col = (...names: string[]) => {
-    for (const n of names) {
-      const idx = header.indexOf(n);
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  };
+  const m = mapping ?? detectMapping(grid[0]);
+  const { name: nameIdx, lastName: lastIdx, phone: phoneIdx, email: emailIdx } = m;
+  const { value: valueIdx, stage: stageIdx } = m;
 
-  const nameIdx = col("name", "full name", "contact", "contact name");
-  const phoneIdx = col("phone", "mobile", "phone number", "contact number");
-  const emailIdx = col("email", "email address", "e-mail");
-  const valueIdx = col("value", "amount", "deal value", "price");
-  const stageIdx = col("stage", "stage name", "status", "column");
-
-  if (nameIdx === -1) {
+  if (nameIdx === UNMAPPED) {
     return {
       rows: [],
       errors: [{ row: 1, message: 'A "name" column is required' }],
@@ -177,14 +266,18 @@ export function mapRows(grid: string[][]): ParseResult {
     const rowNum = i + 1;
     const cells = grid[i];
 
-    const name = (cells[nameIdx] ?? "").trim();
+    // A split name is rejoined here, so the rest of the import — and the
+    // duplicate rule — sees one name the way the product stores it.
+    const first = (cells[nameIdx] ?? "").trim();
+    const last = lastIdx === UNMAPPED ? "" : (cells[lastIdx] ?? "").trim();
+    const name = [first, last].filter(Boolean).join(" ");
     if (!name) {
       errors.push({ row: rowNum, message: "Missing name" });
       continue;
     }
 
-    const email = emailIdx === -1 ? "" : (cells[emailIdx] ?? "").trim();
-    const phone = phoneIdx === -1 ? "" : (cells[phoneIdx] ?? "").trim();
+    const email = emailIdx === UNMAPPED ? "" : (cells[emailIdx] ?? "").trim();
+    const phone = phoneIdx === UNMAPPED ? "" : (cells[phoneIdx] ?? "").trim();
 
     // Prefixed, because one set holds both kinds of key and a phone number in
     // an email column should not match the same digits in a phone column.
@@ -199,19 +292,19 @@ export function mapRows(grid: string[][]): ParseResult {
     }
     for (const k of keys) seen.add(k);
 
-    const stageName = stageIdx === -1 ? "" : (cells[stageIdx] ?? "").trim();
+    const stageName = stageIdx === UNMAPPED ? "" : (cells[stageIdx] ?? "").trim();
 
     rows.push({
       name,
       phone,
       email,
-      value: valueIdx === -1 ? 0 : parseMoney((cells[valueIdx] ?? "").trim()),
+      value: valueIdx === UNMAPPED ? 0 : parseMoney((cells[valueIdx] ?? "").trim()),
       // Omitted rather than set empty, so "no stage given" is one state.
       ...(stageName ? { stageName } : {}),
     });
   }
 
-  return { rows, errors, duplicatesInFile, hasStageColumn: stageIdx !== -1 };
+  return { rows, errors, duplicatesInFile, hasStageColumn: stageIdx !== UNMAPPED };
 }
 
 /**

@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { mapRows, parseCSV, type ParseResult } from "@/lib/csv";
+import {
+  detectMapping,
+  mapRows,
+  parseCSV,
+  UNMAPPED,
+  type ColumnMapping,
+  type ParseResult,
+} from "@/lib/csv";
 import type { ImportResult, Pipeline, Stage } from "@/lib/types";
 
 interface Props {
@@ -39,6 +46,17 @@ export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: P
 
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState("");
+  /*
+   * The raw grid and the column mapping are kept so the mapping can be changed
+   * after the file is read.
+   *
+   * This is what makes an export from another product importable at all. The
+   * previous version guessed the columns from the header and refused the file
+   * when it guessed wrong — which, for somebody migrating off a competitor, is
+   * where the migration stopped.
+   */
+  const [grid, setGrid] = useState<string[][]>([]);
+  const [mapping, setMapping] = useState<ColumnMapping | null>(null);
 
   // Defaults to false on purpose: importing 500 rows with automation on would
   // fire 500 Day-1 emails. It has to be a deliberate choice.
@@ -69,11 +87,44 @@ export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: P
     try {
       // Parsing happens here in the browser; the server only ever sees JSON rows.
       const text = await file.text();
-      setParsed(mapRows(parseCSV(text)));
+      const rows = parseCSV(text);
+      const detected = detectMapping(rows[0] ?? []);
+      setGrid(rows);
+      setMapping(detected);
+      setParsed(mapRows(rows, detected));
     } catch {
       setError("Could not read that file");
     }
   }
+
+  /*
+   * Re-reads the file whenever the mapping changes, so the counts, the errors
+   * and the duplicate tally shown below always describe the mapping on screen
+   * rather than the one it was opened with.
+   */
+  function remap(next: ColumnMapping) {
+    setMapping(next);
+    setParsed(mapRows(grid, next));
+  }
+
+  /** The file's own header labels, for the mapping dropdowns. */
+  const headers = useMemo(
+    () => (grid[0] ?? []).map((h, i) => h.trim() || `Column ${i + 1}`),
+    [grid],
+  );
+
+  /*
+   * Columns the mapping does not use.
+   *
+   * Named rather than ignored in silence: an export carries things this product
+   * has nowhere to put, and somebody migrating needs to know what is being left
+   * behind before they delete the file they exported from.
+   */
+  const ignoredColumns = useMemo(() => {
+    if (!mapping) return [];
+    const used = new Set(Object.values(mapping).filter((i) => i !== UNMAPPED));
+    return headers.filter((_, i) => !used.has(i));
+  }, [headers, mapping]);
 
   /**
    * Stage names from the file, matched to this pipeline's stages.
@@ -255,12 +306,77 @@ export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: P
                 className="text-sm"
               />
               <p className="mt-1 text-xs text-slate-500">
-                Needs a <code>name</code> column. <code>phone</code>,{" "}
-                <code>email</code>, <code>value</code> and <code>stage</code> are
-                optional. A file exported from Contacts or the board imports back
-                as-is.
+                A CSV exported from any CRM or WhatsApp tool. Columns are matched
+                automatically where the names are recognisable, and you can
+                correct them below.
               </p>
             </div>
+
+            {/* Column mapping. Shown as soon as a file is read, because the one
+                thing somebody migrating needs is to see that their columns were
+                understood — and to fix it when they were not. */}
+            {mapping && headers.length > 0 && (
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="mb-2 text-sm font-medium">Match your columns</p>
+                <div className="space-y-2">
+                  {(
+                    [
+                      ["name", "Name", true],
+                      ["lastName", "Last name", false],
+                      ["phone", "Phone", false],
+                      ["email", "Email", false],
+                      ["value", "Value", false],
+                      ["stage", "Stage", false],
+                    ] as [keyof ColumnMapping, string, boolean][]
+                  ).map(([field, label, required]) => (
+                    <div key={field} className="flex items-center gap-2">
+                      <label className="w-24 shrink-0 text-sm text-slate-600">
+                        {label}
+                        {required && <span className="text-rose-500"> *</span>}
+                      </label>
+                      <select
+                        value={mapping[field]}
+                        onChange={(e) =>
+                          remap({ ...mapping, [field]: Number(e.target.value) })
+                        }
+                        className="input min-w-0 flex-1"
+                      >
+                        <option value={UNMAPPED}>
+                          {field === "name" ? "— choose a column —" : "— not imported —"}
+                        </option>
+                        {headers.map((h, i) => (
+                          <option key={i} value={i}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                      {/* The first data row, so the choice can be checked
+                          against real content rather than a header name. */}
+                      {mapping[field] !== UNMAPPED && grid[1] && (
+                        <span
+                          className="w-28 shrink-0 truncate text-xs text-slate-400"
+                          title={grid[1][mapping[field]] ?? ""}
+                        >
+                          {grid[1][mapping[field]] || "—"}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Last name is joined onto the name, so an export that splits them
+                  imports as one contact.
+                </p>
+
+                {ignoredColumns.length > 0 && (
+                  <p className="mt-1.5 text-xs text-amber-700">
+                    Not imported: {ignoredColumns.join(", ")}. This product has
+                    nowhere to put them yet.
+                  </p>
+                )}
+              </div>
+            )}
 
             {parsed && (
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">

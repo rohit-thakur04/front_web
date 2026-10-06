@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectMapping,
   mapRows,
   neutralizeFormula,
   parseCSV,
   parseMoney,
   phoneKey,
   toCSV,
+  UNMAPPED,
 } from "./csv";
 
 describe("parseCSV", () => {
@@ -267,5 +269,118 @@ describe("toCSV formula injection", () => {
   it("writes a real amount untouched and defuses a text one", () => {
     expect(toCSV(["Value"], [[5000]])).toContain("5000");
     expect(toCSV(["Value"], [["-5000"]])).toContain("'-5000");
+  });
+});
+
+describe("detectMapping — reading another platform's export", () => {
+  it("finds a split first and last name", () => {
+    // The single most common shape in a CRM export, and the one that used to
+    // import as a list of first names.
+    const m = detectMapping(["First Name", "Last Name", "Mobile Number"]);
+    expect(m.name).toBe(0);
+    expect(m.lastName).toBe(1);
+    expect(m.phone).toBe(2);
+  });
+
+  it("does not append a combined name column to itself", () => {
+    // "Name" matches the name aliases; nothing should then also claim it as the
+    // surname, or every contact reads "Ada Ada".
+    const m = detectMapping(["Name", "Email"]);
+    expect(m.name).toBe(0);
+    expect(m.lastName).toBe(UNMAPPED);
+  });
+
+  it("recognises the headers WhatsApp tools export", () => {
+    const m = detectMapping(["Customer Name", "WhatsApp Number", "Lead Status"]);
+    expect(m.name).toBe(0);
+    expect(m.phone).toBe(1);
+    expect(m.stage).toBe(2);
+  });
+
+  it("is case and whitespace insensitive", () => {
+    const m = detectMapping(["  FULL NAME  ", "E-Mail"]);
+    expect(m.name).toBe(0);
+    expect(m.email).toBe(1);
+  });
+
+  it("leaves fields the file does not have unmapped", () => {
+    const m = detectMapping(["Name"]);
+    expect(m.phone).toBe(UNMAPPED);
+    expect(m.email).toBe(UNMAPPED);
+    expect(m.value).toBe(UNMAPPED);
+    expect(m.stage).toBe(UNMAPPED);
+  });
+
+  it("maps nothing from headers it does not know", () => {
+    // The dialog then asks. Guessing wrong and refusing the file is what left
+    // an unrecognised export with no way forward at all.
+    const m = detectMapping(["Column A", "Column B"]);
+    expect(m.name).toBe(UNMAPPED);
+  });
+});
+
+describe("mapRows with an explicit mapping", () => {
+  const grid = [
+    ["Col1", "Col2", "Col3", "Col4"],
+    ["Ada", "Lovelace", "9876543210", "1200"],
+  ];
+
+  it("uses the columns it is given, whatever they are called", () => {
+    // The point of the feature: headers nothing could recognise still import,
+    // because a person assigned them.
+    const res = mapRows(grid, {
+      name: 0,
+      lastName: 1,
+      phone: 2,
+      value: 3,
+      email: UNMAPPED,
+      stage: UNMAPPED,
+    });
+    expect(res.errors).toEqual([]);
+    expect(res.rows[0].name).toBe("Ada Lovelace");
+    expect(res.rows[0].phone).toBe("9876543210");
+    expect(res.rows[0].value).toBe(1200);
+  });
+
+  it("joins a split name with one space and no stray padding", () => {
+    const res = mapRows(
+      [["a", "b"], ["  Ada  ", "  Lovelace  "]],
+      { name: 0, lastName: 1, phone: UNMAPPED, email: UNMAPPED, value: UNMAPPED, stage: UNMAPPED },
+    );
+    expect(res.rows[0].name).toBe("Ada Lovelace");
+  });
+
+  it("keeps a row whose surname cell is empty", () => {
+    // A blank surname is a real contact, not a broken row. Dropping it would
+    // lose records silently in the middle of a migration.
+    const res = mapRows(
+      [["a", "b"], ["Ada", ""]],
+      { name: 0, lastName: 1, phone: UNMAPPED, email: UNMAPPED, value: UNMAPPED, stage: UNMAPPED },
+    );
+    expect(res.errors).toEqual([]);
+    expect(res.rows[0].name).toBe("Ada");
+  });
+
+  it("still reports a row with no name at all", () => {
+    const res = mapRows(
+      [["a", "b"], ["", ""]],
+      { name: 0, lastName: 1, phone: UNMAPPED, email: UNMAPPED, value: UNMAPPED, stage: UNMAPPED },
+    );
+    expect(res.rows).toHaveLength(0);
+    expect(res.errors[0].message).toBe("Missing name");
+  });
+
+  it("dedupes on the rejoined name's phone and email, not on the raw columns", () => {
+    // The duplicate rule has to see what the server will store.
+    const res = mapRows(
+      [
+        ["a", "b", "c"],
+        ["Ada", "Lovelace", "9876543210"],
+        ["Ada", "Byron", "98765 43210"],
+      ],
+      { name: 0, lastName: 1, phone: 2, email: UNMAPPED, value: UNMAPPED, stage: UNMAPPED },
+    );
+    expect(res.rows).toHaveLength(1);
+    expect(res.duplicatesInFile).toBe(1);
   });
 });
