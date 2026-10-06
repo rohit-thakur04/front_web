@@ -61,6 +61,9 @@ const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
     items: [
       { href: "/workflows", label: "Workflows", icon: "Sparkle", feature: "workflows" },
       { href: "/templates", label: "Email Templates", icon: "Mail", feature: "email" },
+      // Under Automation because that is what it is: the same templates and the
+      // same send path, aimed at a list instead of at one arriving lead.
+      { href: "/broadcasts", label: "Broadcast", icon: "Send", feature: "bulk_import" },
       { href: "/waba", label: "WhatsApp Templates", icon: "Chat", feature: "waba" },
     ],
   },
