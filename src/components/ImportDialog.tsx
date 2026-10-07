@@ -57,6 +57,9 @@ export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: P
    */
   const [grid, setGrid] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ColumnMapping | null>(null);
+  // Highlights the drop target while a file is over it, so the box confirms it
+  // will accept the drop before the mouse is released.
+  const [dragging, setDragging] = useState(false);
 
   // Defaults to false on purpose: importing 500 rows with automation on would
   // fire 500 Day-1 emails. It has to be a deliberate choice.
@@ -295,17 +298,79 @@ export function ImportDialog({ pipelines, onClose, onDone, lockedPipelineId }: P
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">CSV file</label>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
+              {/* A heading, not a second label: the box below already labels
+                  the input, and two labels on one control get announced
+                  together as one run-on name. */}
+              <p className="mb-1 text-sm font-medium">CSV file</p>
+
+              {/*
+                A bordered target rather than a bare file input.
+
+                The native control renders a small "Choose File" button with no
+                boundary around it, sitting in whitespace — so the one thing
+                this dialog needs somebody to do was the hardest thing on it to
+                find. The whole box is now the control: it is a label wrapping
+                the input, so clicking anywhere in it opens the picker with no
+                JavaScript involved, and dropping a file on it works too since
+                a box this shape invites that.
+
+                The input stays in the DOM and only visually hidden, so it keeps
+                its keyboard focus and its accessible name. focus-within puts
+                the ring on the box, because the element being focused is the
+                one nobody can see.
+              */}
+              <label
+                htmlFor="import-file"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const f = e.dataTransfer.files?.[0];
                   if (f) onFile(f);
                 }}
-                className="text-sm"
-              />
-              <p className="mt-1 text-xs text-slate-500">
+                className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center transition-colors focus-within:border-blue-500 focus-within:ring-[3px] focus-within:ring-blue-500/20 ${
+                  dragging
+                    ? "border-blue-500 bg-blue-50"
+                    : fileName
+                      ? "border-emerald-300 bg-emerald-50/40 hover:border-emerald-400"
+                      : "border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-slate-100"
+                }`}
+              >
+                <input
+                  id="import-file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onFile(f);
+                  }}
+                  className="sr-only"
+                />
+
+                {fileName ? (
+                  <>
+                    <span className="text-sm font-medium text-emerald-800">
+                      ✓ {fileName}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      Click to choose a different file
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-medium text-slate-700">
+                      Click to choose a CSV file
+                    </span>
+                    <span className="text-xs text-slate-500">or drag one here</span>
+                  </>
+                )}
+              </label>
+
+              <p className="mt-1.5 text-xs text-slate-500">
                 A CSV exported from any CRM or WhatsApp tool. Columns are matched
                 automatically where the names are recognisable, and you can
                 correct them below.
