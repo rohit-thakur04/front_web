@@ -1,121 +1,93 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Icon, type IconName } from "./icons";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Icon } from "./icons";
 import { useAuth } from "@/lib/auth";
-
-// The Lead Generation group's feature keys. The nav item shows when a plan
-// enables at least one of them.
-const LEAD_GEN_FEATURES = [
-  "shop",
-  "sites",
-  "chat_widget",
-  "forms",
-  "surveys",
-  "ad_launcher",
-  "ai_social",
-  "prospecting",
-  "urls",
-];
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: IconName;
-  adminOnly?: boolean;
-  // feature is the plan key that must be enabled for a client to see this item.
-  // Omitted items are always shown (subject to adminOnly).
-  feature?: string;
-  // anyFeature shows the item when at least one of these keys is enabled.
-  anyFeature?: string[];
-}
-
-// Grouped like the reference, but wired to the features this app actually has.
-const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
-  {
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: "Dashboard", feature: "dashboard" },
-      // Sits beside the Dashboard rather than under Pipeline on purpose. The
-      // dashboard says how things are going; this says what to do next, which
-      // is the question somebody opens the product with.
-      { href: "/needs-attention", label: "Needs Attention", icon: "Bell", feature: "pipeline" },
-    ],
-  },
-  {
-    heading: "Lead Generation",
-    items: [
-      // Shown when the plan enables any lead-gen feature (see anyFeature below).
-      { href: "/lead-generation", label: "Lead Generation", icon: "Sparkle", anyFeature: LEAD_GEN_FEATURES },
-    ],
-  },
-  {
-    heading: "Pipeline",
-    items: [
-      { href: "/board", label: "Board", icon: "Board", feature: "pipeline" },
-      { href: "/contacts", label: "Contacts", icon: "Contacts", feature: "contacts" },
-    ],
-  },
-  {
-    heading: "Automation",
-    items: [
-      { href: "/workflows", label: "Workflows", icon: "Sparkle", feature: "workflows" },
-      { href: "/templates", label: "Email Templates", icon: "Mail", feature: "email" },
-      // Under Automation because that is what it is: the same templates and the
-      // same send path, aimed at a list instead of at one arriving lead.
-      { href: "/broadcasts", label: "Broadcast", icon: "Send", feature: "bulk_import" },
-      { href: "/waba", label: "WhatsApp Templates", icon: "Chat", feature: "waba" },
-    ],
-  },
-  {
-    heading: "Workspace",
-    items: [
-      // Settings (App Store, etc.) is available to clients and admins alike;
-      // each user manages their own workspace and integrations.
-      { href: "/settings", label: "Settings", icon: "Sparkle" },
-    ],
-  },
-  {
-    heading: "Admin",
-    items: [
-      { href: "/plans", label: "Plans", icon: "Layers", adminOnly: true },
-      { href: "/clients", label: "Clients", icon: "Shield", adminOnly: true },
-      // Beside Clients because that is where it gets used: capture a configured
-      // account, then start the next client from it.
-      { href: "/snapshots", label: "Snapshots", icon: "Layers", adminOnly: true },
-    ],
-  },
-];
+import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 
 interface Props {
   open: boolean;
-  onNavigate: () => void;
+  onNavigate?: () => void;
 }
 
+/*
+The sidebar.
+
+Rebuilt around the architecture in lib/navigation rather than the source
+product's feature grouping, which is what the previous version mirrored and
+said so in a comment.
+
+Three structural departures, none of them cosmetic:
+
+- The active item is marked by a left rail and a weight change on a flat
+  surface, not by a filled accent block. A solid blue pill is the house style
+  of every white-label CRM, and it makes the nav the loudest thing on screen
+  when it should be the quietest.
+
+- Group headings are rules with a label, not floating uppercase text. They read
+  as structure rather than as more items.
+
+- Search sits at the top of the nav as a control, because with twenty-three
+  screens typing is faster than looking — and that control is also the only
+  thing in the product that searches across it.
+*/
 export function Sidebar({ open, onNavigate }: Props) {
   const pathname = usePathname();
+  const params = useSearchParams();
   const { isAdmin, hasFeature } = useAuth();
+
+  /*
+   * Which item is current.
+   *
+   * Three of them share /lead-generation and differ only by query string, so
+   * matching on pathname alone would light all three at once. A prefix match is
+   * still right for everything else, where /templates/new belongs to Templates.
+   */
+  function isActive(item: NavItem): boolean {
+    const [path, qs] = item.href.split("?");
+    if (!pathname.startsWith(path)) return false;
+    if (!qs) return true;
+    const want = new URLSearchParams(qs).get("tab");
+    const have = params.get("tab");
+    // With no tab in the URL the first of the group is the one on screen.
+    return have ? have === want : want === "sites";
+  }
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-[var(--ark-line)] bg-[var(--ark-surface)] transition-transform duration-200 lg:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="flex h-16 items-center gap-2 px-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-[0_2px_10px_-2px_rgba(37,99,235,0.6)]">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
-            <path d="M12 3 3 20h18L12 3z" />
-            <path d="M12 11 8 20M12 11l4 9" />
-          </svg>
+      {/* Brand. A flat monogram rather than a gradient tile: this product is a
+          tool, and the chrome should not be the most decorated thing in it. */}
+      <div className="flex h-14 items-center gap-2.5 border-b border-[var(--ark-line)] px-4">
+        <span className="flex h-7 w-7 items-center justify-center rounded-[var(--ark-r-sm)] bg-[var(--ark-ink)] text-[13px] font-bold text-[var(--ark-ink-inverse)]">
+          A
         </span>
-        <span className="text-lg font-bold tracking-[0.02em]">ARKQUEN</span>
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--ark-ink)]">
+          Arkquen
+        </span>
       </div>
-      {/* Separates the brand from the nav without a full-width rule, which read
-          as the start of a section rather than the end of the header. */}
-      <div className="mx-5 border-b border-slate-100" />
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
+      {/* The search control. Dispatches to the palette rather than holding its
+          own input, so there is one search in the product and one set of
+          keyboard rules for it. */}
+      <div className="px-3 pt-3">
+        <button
+          onClick={() => window.dispatchEvent(new Event("arkquen:open-command"))}
+          className="flex w-full items-center gap-2 rounded-[var(--ark-r-md)] border border-[var(--ark-line)] bg-[var(--ark-surface-2)] px-2.5 py-1.5 text-left text-[13px] text-[var(--ark-ink-muted)] transition-colors hover:border-[var(--ark-line-strong)] hover:text-[var(--ark-ink-3)]"
+        >
+          <span aria-hidden>⌕</span>
+          <span className="flex-1">Search</span>
+          <kbd className="rounded-[var(--ark-r-sm)] border border-[var(--ark-line)] bg-[var(--ark-surface)] px-1 py-0.5 text-[10px]">
+            ⌘K
+          </kbd>
+        </button>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 py-3">
         {NAV_GROUPS.map((group, gi) => {
           const items = group.items.filter(
             (it) =>
@@ -126,15 +98,21 @@ export function Sidebar({ open, onNavigate }: Props) {
           if (items.length === 0) return null;
 
           return (
-            <div key={gi}>
+            <div key={gi} className={gi === 0 ? "" : "mt-5"}>
               {group.heading && (
-                <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                  {group.heading}
-                </p>
+                /* A rule carrying its label, so the heading reads as a divider
+                   rather than as another nav entry in small caps. */
+                <div className="mb-1.5 flex items-center gap-2 px-2">
+                  <span className="text-[10px] font-semibold tracking-[0.1em] text-[var(--ark-ink-muted)] uppercase">
+                    {group.heading}
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--ark-line)]" />
+                </div>
               )}
-              <div className="space-y-0.5">
+
+              <div className="space-y-px">
                 {items.map((item) => {
-                  const active = pathname.startsWith(item.href);
+                  const active = isActive(item);
                   const IconEl = Icon[item.icon];
                   return (
                     <Link
@@ -142,22 +120,27 @@ export function Sidebar({ open, onNavigate }: Props) {
                       href={item.href}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition duration-150 ${
+                      className={`group relative flex items-center gap-2.5 rounded-[var(--ark-r-md)] py-1.5 pr-2 pl-3 text-[13px] transition-colors ${
                         active
-                          ? "bg-blue-600 text-white shadow-[0_2px_8px_-2px_rgba(37,99,235,0.5)]"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                          ? "bg-[var(--ark-surface-2)] font-semibold text-[var(--ark-ink)]"
+                          : "font-medium text-[var(--ark-ink-3)] hover:bg-[var(--ark-surface-2)] hover:text-[var(--ark-ink)]"
                       }`}
                     >
-                      {/* A rail on the active item, so position survives being
-                          read at a glance or in a screenshot where the blue
-                          fill and a hover tint look alike. */}
-                      {active && (
-                        <span className="absolute inset-y-1.5 -left-1 w-0.5 rounded-full bg-blue-600" />
-                      )}
-                      <IconEl
-                        className={`transition-transform duration-150 group-hover:scale-110 ${
-                          active ? "text-white" : "text-slate-400 group-hover:text-slate-600"
+                      {/* The rail. Carries the accent so the row itself does
+                          not have to, which keeps the nav quiet while still
+                          making position unmistakable at a glance. */}
+                      <span
+                        aria-hidden
+                        className={`absolute inset-y-1 left-0 w-[2px] rounded-full transition-colors ${
+                          active ? "bg-[var(--ark-primary)]" : "bg-transparent"
                         }`}
+                      />
+                      <IconEl
+                        width={15}
+                        height={15}
+                        className={
+                          active ? "text-[var(--ark-primary)]" : "text-[var(--ark-ink-muted)]"
+                        }
                       />
                       {item.label}
                     </Link>
@@ -169,7 +152,7 @@ export function Sidebar({ open, onNavigate }: Props) {
         })}
       </nav>
 
-      <div className="border-t border-slate-100 p-4 text-xs text-slate-400">
+      <div className="border-t border-[var(--ark-line)] px-4 py-2.5 text-[11px] text-[var(--ark-ink-muted)]">
         Arkquen
       </div>
     </aside>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Badge, Button, EmptyState, PageTitle, Panel, Skeleton } from "@/components/kit";
 
 interface AttentionContact {
   cardId: string;
@@ -27,16 +28,26 @@ interface AttentionGroup {
 }
 
 /*
-The screen that answers "what do I do next".
+Needs Attention — the screen the product opens on.
 
-Every other screen in the product answers "how are we doing" — counts, charts,
-a board of columns. None of them distinguishes a lead that arrived on Tuesday
-and was never opened from one that was called twice, because on a board they
-look identical.
+Built on the component kit as the first screen to adopt it, deliberately: it is
+the one somebody sees first and most often, so it is where a design language
+either holds up or does not.
 
-Each group here is a statement of fact about stored data, never advice. That
-restraint is the whole value: a screen that cries wolf gets skimmed, and then
-the one row that mattered gets skimmed with it.
+Three things it does differently from the rest of the product, and all three are
+structural rather than visual:
+
+- It is a worklist, not a dashboard. Every row names a person, a reason and an
+  elapsed time, and carries the action for it. Nothing here is a count that
+  leads somewhere else.
+
+- The action travels with the row. Calling is one tap from the row rather than
+  three clicks through a board, because for almost every row here the next
+  action is to ring them.
+
+- Severity is carried by a badge with a dot and by order, never by colour
+  alone. These rows are red and amber, which are the two colours a red-green
+  colourblind reader cannot separate.
 */
 export default function NeedsAttentionPage() {
   const [groups, setGroups] = useState<AttentionGroup[] | null>(null);
@@ -44,41 +55,73 @@ export default function NeedsAttentionPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ groups: AttentionGroup[]; total: number }>("/attention/contacts")
-      .then((r) => {
+    async function run() {
+      try {
+        const r = await api<{ groups: AttentionGroup[]; total: number }>(
+          "/attention/contacts",
+        );
         setGroups(r.groups ?? []);
         setTotal(r.total);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load"));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not load this list");
+      }
+    }
+    void run();
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1100px] p-6">
-      <PageHeader
+    <div className="mx-auto max-w-[920px] px-6 py-6">
+      <PageTitle
+        eyebrow="Today"
         title="Needs Attention"
-        subtitle={
+        description={
           total > 0
-            ? `${total} contact${total === 1 ? "" : "s"} waiting on someone`
-            : "Contacts waiting on someone"
+            ? `${total} contact${total === 1 ? "" : "s"} waiting on someone. Oldest first.`
+            : "Contacts waiting on a person rather than on an automation."
+        }
+        actions={
+          <Button
+            tone="ghost"
+            size="sm"
+            icon={<Icon.Board width={14} height={14} />}
+            onClick={() => (window.location.href = "/board")}
+          >
+            Open board
+          </Button>
         }
       />
 
       {error && (
-        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <Panel className="mb-4">
+          <p className="text-sm text-[var(--ark-danger)]">{error}</p>
+        </Panel>
       )}
 
-      {groups === null && !error && <p className="text-sm text-slate-500">Loading…</p>}
-
-      {/* The empty state is a result, not a gap. Somebody who has cleared their
-          leads should be told so plainly rather than shown a blank page that
-          reads as something having failed to load. */}
-      {groups !== null && groups.length === 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
-          <p className="text-sm font-medium">Nothing is waiting on you.</p>
-          <p className="mt-1 text-sm text-slate-500">
-            Every contact has been picked up, and no follow-up has failed in the last week.
-          </p>
+      {/* A skeleton shaped like the rows that are coming, rather than the word
+          "Loading" and then a jump. */}
+      {groups === null && !error && (
+        <div className="space-y-3">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-2/3" />
         </div>
+      )}
+
+      {groups !== null && groups.length === 0 && (
+        <Panel flush>
+          <EmptyState
+            icon={<Icon.Check width={18} height={18} />}
+            title="Nothing is waiting on you."
+            body="Every contact has been picked up, and no follow-up has failed in the last week. This list fills itself as enquiries arrive."
+            action={
+              <Link href="/contacts">
+                <Button tone="neutral" size="sm">
+                  See all contacts
+                </Button>
+              </Link>
+            }
+          />
+        </Panel>
       )}
 
       <div className="space-y-4">
@@ -91,63 +134,54 @@ export default function NeedsAttentionPage() {
 }
 
 function Group({ group }: { group: AttentionGroup }) {
-  const error = group.severity === "error";
-  // Shown only when the cap hid some. A count that silently disagrees with the
-  // number of rows is how a client decides the screen is broken.
+  const tone = group.severity === "error" ? "danger" : "warn";
+  // Shown only when the cap hid some. A count that disagrees with the number of
+  // rows is how somebody decides the screen is broken.
   const hidden = group.total - group.contacts.length;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div
-        className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b px-4 py-3 ${
-          error ? "border-rose-100 bg-rose-50" : "border-amber-100 bg-amber-50"
-        }`}
-      >
-        <h2 className={`text-sm font-semibold ${error ? "text-rose-900" : "text-amber-900"}`}>
-          {group.title}
-        </h2>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            error ? "bg-rose-600 text-white" : "bg-amber-500 text-white"
-          }`}
-        >
-          {group.total}
-        </span>
-        <p className={`w-full text-xs ${error ? "text-rose-800" : "text-amber-800"}`}>
-          {group.why}
-        </p>
-      </div>
-
-      <ul className="divide-y divide-slate-100">
+    <Panel
+      flush
+      title={group.title}
+      description={group.why}
+      actions={<Badge tone={tone}>{group.total}</Badge>}
+    >
+      <ul className="divide-y divide-[var(--ark-line)]">
         {group.contacts.map((c) => (
-          <li key={c.cardId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+          <li
+            key={c.cardId}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 transition-colors hover:bg-[var(--ark-surface-2)]"
+          >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{c.name || "Unnamed contact"}</p>
-              <p className="truncate text-xs text-slate-500">
-                {c.stageName && <span>{c.stageName} · </span>}
+              <p className="truncate text-[13px] font-medium text-[var(--ark-ink)]">
+                {c.name || "Unnamed contact"}
+              </p>
+              <p className="truncate text-xs text-[var(--ark-ink-3)]">
+                {c.stageName && (
+                  <span className="text-[var(--ark-ink-muted)]">{c.stageName} · </span>
+                )}
                 {c.detail}
               </p>
             </div>
 
-            {/* A phone link is the whole point on a screen like this: the next
-                action for almost every row is to ring them. Rendered only when
-                there is a number, rather than as a dead control. */}
+            {/* Rendered only where there is something to act on. A dead control
+                that looks live is worse than no control. */}
             {c.phone && (
-              <a
-                href={`tel:${c.phone}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-              >
-                <Icon.Phone width={13} height={13} />
-                Call
+              <a href={`tel:${c.phone}`} className="shrink-0">
+                <Button
+                  tone="primary"
+                  size="sm"
+                  icon={<Icon.Phone width={13} height={13} />}
+                >
+                  Call
+                </Button>
               </a>
             )}
             {c.email && (
-              <a
-                href={`mailto:${c.email}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-              >
-                <Icon.Mail width={13} height={13} />
-                Email
+              <a href={`mailto:${c.email}`} className="shrink-0">
+                <Button tone="neutral" size="sm" icon={<Icon.Mail width={13} height={13} />}>
+                  Email
+                </Button>
               </a>
             )}
           </li>
@@ -155,10 +189,10 @@ function Group({ group }: { group: AttentionGroup }) {
       </ul>
 
       {hidden > 0 && (
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-          {hidden} more not shown. Clear some of these first — the oldest are listed.
+        <p className="border-t border-[var(--ark-line)] px-4 py-2 text-xs text-[var(--ark-ink-3)]">
+          {hidden} more not shown — clear some of these first. The oldest are listed.
         </p>
       )}
-    </section>
+    </Panel>
   );
 }

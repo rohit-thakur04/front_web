@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/icons";
 import { SitesTab } from "@/components/leadgen/SitesTab";
@@ -53,12 +54,34 @@ const BLURBS: Record<string, { title: string; blurb: string }> = {
 export default function LeadGenerationPage() {
   const { hasFeature } = useAuth();
 
+  /*
+   * The tab is addressable.
+   *
+   * It used to live only in local state, so every link into this area landed on
+   * whichever tab happened to be first — which is also why Forms and Short
+   * Links had to be reached by clicking through rather than linked to at all.
+   * The sidebar now links straight to each one.
+   */
+  const params = useSearchParams();
+  const requested = params.get("tab") ?? "";
+
   // Only tabs the plan allows are shown.
   const tabs = useMemo(() => TABS.filter((t) => hasFeature(t.key)), [hasFeature]);
-  const [active, setActive] = useState<string>(tabs[0]?.key ?? "sites");
+  const [active, setActive] = useState<string>("");
 
-  // If the active tab got filtered out (plan change), fall back to the first.
-  const current = tabs.find((t) => t.key === active)?.key ?? tabs[0]?.key;
+  /*
+   * What is actually on screen: an explicit click first, then the tab asked for
+   * in the URL, then the first available one.
+   *
+   * In that order so following a link opens what the link named, while clicking
+   * a tab afterwards still wins — resolving the URL last would make the tab
+   * strip stop working on any page reached by a link.
+   */
+  const current =
+    tabs.find((t) => t.key === active)?.key ??
+    tabs.find((t) => t.key === requested)?.key ??
+    tabs[0]?.key;
+
 
   const primary = tabs.filter((t) => t.built);
   const more = tabs.filter((t) => !t.built);

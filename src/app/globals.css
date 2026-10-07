@@ -5,8 +5,150 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+  =========================================================================
+  ARKQUEN DESIGN TOKENS
+  =========================================================================
+
+  The product this was rebuilt from is a white-label CRM, and the rebuild
+  inherited its look by inheriting its construction: cool slate greys, a blue
+  primary, 12px rounded cards, generous padding, tinted pill badges. That is
+  also what every other white-label CRM looks like, which is why recolouring it
+  would change nothing — the resemblance is in the shape, not the hue.
+
+  So these tokens take deliberate positions against that, chosen for what this
+  product actually is: an operations console for small Indian businesses, used
+  all day, often on a cheap Android phone, to make sure no enquiry is dropped.
+  Dense, fast and legible beats spacious and decorative.
+
+  1. WARM NEUTRALS, not cool slate. The entire inherited palette is blue-grey.
+     A warm grey reads as paper and ink rather than as dashboard chrome, and it
+     is the single change that most stops a screenshot looking familiar.
+
+  2. TEAL PRIMARY, not blue. Blue is the inherited accent and the default of
+     the category. Teal is distinguishable at a glance, holds up on both
+     themes, and leaves blue free to mean nothing at all.
+
+  3. TIGHTER RADII. 6px, not 12px. Rounded cards are the house style of the
+     thing being differentiated from; a squarer surface reads as a tool.
+
+  4. TWO ELEVATIONS ONLY, resting and overlay. The inherited design leans on
+     shadow for hierarchy; this one leans on borders and spacing, which stay
+     legible on a cheap screen in daylight.
+
+  Every value is a variable so a screen can never invent its own.
+*/
+:root {
+  /* --- Surfaces, warm-neutral ------------------------------------------ */
+  --ark-bg: #f7f6f3;
+  --ark-surface: #ffffff;
+  --ark-surface-2: #f2f1ed;
+  --ark-surface-3: #e9e7e1;
+  --ark-overlay: #ffffff;
+
+  /* --- Ink -------------------------------------------------------------- */
+  --ark-ink: #1a1917;
+  --ark-ink-2: #46443f;
+  --ark-ink-3: #6b6760;
+  --ark-ink-muted: #918c83;
+  --ark-ink-inverse: #fbfaf8;
+
+  /* --- Lines ------------------------------------------------------------ */
+  --ark-line: #e2e0d9;
+  --ark-line-strong: #cfccc2;
+
+  /* --- Primary: teal ---------------------------------------------------- */
+  --ark-primary: #0f766e;
+  --ark-primary-hover: #115e58;
+  --ark-primary-ink: #ffffff;
+  --ark-primary-soft: #d8f0ed;
+  --ark-primary-soft-ink: #0b544e;
+  --ark-focus: rgba(15, 118, 110, 0.28);
+
+  /* --- Semantic --------------------------------------------------------- */
+  --ark-ok: #10704a;
+  --ark-ok-soft: #d6f0e2;
+  --ark-ok-ink: #0a5234;
+
+  --ark-warn: #a35b06;
+  --ark-warn-soft: #fbeacb;
+  --ark-warn-ink: #7a4305;
+
+  --ark-danger: #b42318;
+  --ark-danger-soft: #fbddd9;
+  --ark-danger-ink: #8a1b13;
+
+  --ark-info: #46443f;
+  --ark-info-soft: #eceae4;
+  --ark-info-ink: #46443f;
+
+  /* --- Radius: squarer than the category default ----------------------- */
+  --ark-r-sm: 4px;
+  --ark-r-md: 6px;
+  --ark-r-lg: 10px;
+  --ark-r-full: 9999px;
+
+  /* --- Elevation: resting and overlay, nothing in between -------------- */
+  --ark-shadow-rest: 0 1px 0 rgba(26, 25, 23, 0.04);
+  --ark-shadow-overlay: 0 16px 40px -12px rgba(26, 25, 23, 0.28);
+
+  /* --- Row rhythm. Dense on purpose: these tables are read, not admired. */
+  --ark-row-h: 38px;
+  --ark-control-h: 34px;
+}
+
+html.dark {
+  /* Warm-neutral darks rather than the usual blue-black, so the theme is
+     recognisably the same product with the lights off. */
+  --ark-bg: #16150f;
+  --ark-surface: #1e1d17;
+  --ark-surface-2: #262419;
+  --ark-surface-3: #332f22;
+  --ark-overlay: #24231c;
+
+  --ark-ink: #f5f3ec;
+  --ark-ink-2: #ddd9cd;
+  --ark-ink-3: #b5b0a2;
+  --ark-ink-muted: #8c8779;
+  --ark-ink-inverse: #16150f;
+
+  --ark-line: #332f22;
+  --ark-line-strong: #46412f;
+
+  /* Lifted, because the light-theme teal goes muddy on a dark surface. */
+  --ark-primary: #2dd4bf;
+  --ark-primary-hover: #5eead4;
+  --ark-primary-ink: #0b2e2a;
+  --ark-primary-soft: rgba(45, 212, 191, 0.16);
+  --ark-primary-soft-ink: #7fe8db;
+  --ark-focus: rgba(45, 212, 191, 0.32);
+
+  --ark-ok: #34d399;
+  --ark-ok-soft: rgba(52, 211, 153, 0.16);
+  --ark-ok-ink: #86efc5;
+
+  --ark-warn: #fbbf24;
+  --ark-warn-soft: rgba(251, 191, 36, 0.16);
+  --ark-warn-ink: #fcd77e;
+
+  --ark-danger: #fb7185;
+  --ark-danger-soft: rgba(251, 113, 133, 0.16);
+  --ark-danger-ink: #fda4af;
+
+  --ark-info: #b5b0a2;
+  --ark-info-soft: rgba(181, 176, 162, 0.14);
+  --ark-info-ink: #ddd9cd;
+
+  --ark-shadow-rest: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --ark-shadow-overlay: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
 body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  /* From the tokens, so the page behind the shell is the same warm neutral as
+     the shell itself rather than the cool slate it was. */
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
 }
 
 /*
@@ -280,9 +422,11 @@ body {
    page the user visits is dark without per-component changes. White TEXT is left
    alone (only `bg-white` backgrounds are remapped), so buttons keep white labels. */
 
+/* Superseded by the tokens on `body` above; kept as the explicit dark pairing
+   so the two systems cannot disagree about the page behind everything. */
 html.dark body {
-  background-color: #0b1220;
-  color: #e6edf5;
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
 }
 
 /* Surfaces */

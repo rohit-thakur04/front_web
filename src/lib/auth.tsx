@@ -84,7 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         setFeatures(null);
       }
-      router.push("/dashboard");
+      // The screen with work on it, not the one with charts on it.
+      router.push("/needs-attention");
     },
     [router],
   );

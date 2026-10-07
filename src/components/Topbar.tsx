@@ -29,7 +29,7 @@ export function Topbar({ onToggleSidebar }: Props) {
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-[var(--ark-line)] bg-[var(--ark-surface)]/85 px-4 backdrop-blur-md">
       <button
         onClick={onToggleSidebar}
         className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
@@ -39,6 +39,19 @@ export function Topbar({ onToggleSidebar }: Props) {
       </button>
 
       <div className="flex-1" />
+
+      {/* A discoverable way into the palette. The shortcut is faster, but a
+          shortcut nobody knows about is a feature nobody has — and on a phone
+          there is no keyboard to press it with. */}
+      <button
+        onClick={() => window.dispatchEvent(new Event("arkquen:open-command"))}
+        title="Search contacts or jump to a screen (Ctrl/Cmd K)"
+        aria-label="Search contacts or jump to a screen"
+        className="flex items-center gap-1.5 rounded-[var(--ark-r-md)] border border-[var(--ark-line)] px-2 py-1.5 text-[13px] text-[var(--ark-ink-muted)] transition-colors hover:border-[var(--ark-line-strong)] hover:text-[var(--ark-ink-3)]"
+      >
+        <span aria-hidden>⌕</span>
+        <kbd className="hidden text-[10px] sm:block">⌘K</kbd>
+      </button>
 
       <button
         onClick={toggle}

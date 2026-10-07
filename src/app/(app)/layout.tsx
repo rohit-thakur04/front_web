@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { CommandPalette } from "@/components/CommandPalette";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -19,7 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--ark-bg)] text-sm text-[var(--ark-ink-3)]">
         Loading…
       </div>
     );
@@ -27,7 +28,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[var(--ark-bg)]">
+      {/* Mounted in the shell rather than per page, so the shortcut works from
+          anywhere in the product. */}
+      <CommandPalette />
+
       <Sidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
 
       {/* Backdrop for the mobile drawer. */}
@@ -39,7 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content is inset by the sidebar width on large screens. */}
-      <div className="lg:pl-60">
+      <div className="lg:pl-[232px]">
         <Topbar onToggleSidebar={() => setSidebarOpen((o) => !o)} />
         <main>{children}</main>
       </div>

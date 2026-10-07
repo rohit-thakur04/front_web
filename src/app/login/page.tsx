@@ -16,7 +16,9 @@ export default function LoginPage() {
 
   // An already-signed-in visitor has no business on the login screen.
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
+    // Same destination as the root: the first screen after signing in is the
+    // one with work on it.
+    if (!loading && user) router.replace("/needs-attention");
   }, [loading, user, router]);
 
   async function onSubmit(e: React.FormEvent) {
