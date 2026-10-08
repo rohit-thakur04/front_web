@@ -248,12 +248,19 @@ body {
     border-radius: 2px;
   }
 
-  /* Inputs draw their own ring above, so they opt out of the generic one
-     rather than wearing both. */
-  .input:focus-visible,
-  input:focus-visible,
-  select:focus-visible,
-  textarea:focus-visible {
+  /*
+    Only `.input` opts out of the generic ring, because only `.input` has one of
+    its own.
+
+    This used to name `input`, `select` and `textarea` as well, which removed
+    the outline from every field in the product — including the ones that
+    hand-roll their own border classes instead of using the utility, such as the
+    contact dialog's. Those had no replacement ring, so they ended up with no
+    focus indicator at all and a keyboard user could not tell which field they
+    were in. Suppressing a fallback is only safe where something takes its
+    place.
+  */
+  .input:focus-visible {
     outline: none;
   }
 
@@ -480,6 +487,32 @@ html.dark .text-rose-600 { color: #fca5a5 !important; }
 html.dark .text-red-700,
 html.dark .text-red-600 { color: #fca5a5 !important; }
 html.dark .text-violet-600 { color: #c4b5fd !important; }
+
+/*
+  The dark end of every tint ramp.
+
+  An audit measured the dashboard's attention banner at 1.72:1 on dark — the one
+  component in the product whose entire job is to be noticed. It is
+  `bg-rose-50 text-rose-900`: the background was remapped to a translucent rose
+  and the text was not, because only rose-600 and rose-700 were listed. So
+  near-black red sat on a dark surface and the warning became the least legible
+  thing on screen.
+
+  Fourteen colours were used in the app with no dark pairing. These are the nine
+  that are dark enough to disappear; the remaining five are mid-tones that stay
+  legible either way. Fixed here as a class of bug rather than on the one
+  component that was measured, because the next component to use text-rose-900
+  would have failed in exactly the same way.
+*/
+html.dark .text-rose-900,
+html.dark .text-rose-800,
+html.dark .text-red-800 { color: #fca5a5 !important; }
+html.dark .text-amber-900,
+html.dark .text-amber-700 { color: #fcd34d !important; }
+html.dark .text-blue-900,
+html.dark .text-blue-800 { color: #93c5fd !important; }
+html.dark .text-emerald-900 { color: #6ee7b7 !important; }
+html.dark .text-violet-700 { color: #c4b5fd !important; }
 
 /* Buttons/marks authored as slate-900 stay high-contrast on dark. */
 html.dark .bg-slate-900 { background-color: #2563eb !important; }

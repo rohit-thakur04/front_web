@@ -117,6 +117,17 @@ export default function ContactsPage() {
   // table under it.
   const totals = useMemo(() => summarize(rows), [rows]);
 
+  /*
+   * Not loaded yet is not the same as empty.
+   *
+   * `data` starts null, so for the second or so the API takes to answer, every
+   * derived value read as zero and the table rendered "No contacts yet — add
+   * your first contact" to somebody who has ten. Telling a business their
+   * records are gone, on every navigation, is the worst thing this screen
+   * could say, and it said it for a measured 1.6 seconds each time.
+   */
+  const loading = data === null && !error;
+
   /**
    * The selection that a bulk action will actually touch.
    *
@@ -241,17 +252,25 @@ export default function ContactsPage() {
       />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatTile label={filtering ? "Matching contacts" : "Total contacts"} value={totals.totalContacts} icon="Contacts" tone="violet" badge="" />
+        {/* An em dash while loading. A zero is a claim about the data; a dash
+            says we do not know yet, which is the truth. */}
+        <StatTile
+          label={filtering ? "Matching contacts" : "Total contacts"}
+          value={loading ? "—" : totals.totalContacts}
+          icon="Contacts"
+          tone="violet"
+          badge=""
+        />
         <StatTile
           label="Total value"
-          value={`₹${totals.totalValue.toLocaleString("en-IN")}`}
+          value={loading ? "—" : `₹${totals.totalValue.toLocaleString("en-IN")}`}
           icon="Money"
           tone="green"
           badge=""
         />
-        <StatTile label="With email" value={totals.withEmail} icon="Mail" tone="blue" badge="" />
-        <StatTile label="With phone" value={totals.withPhone} icon="Phone" tone="blue" badge="" />
-        <StatTile label="Active automations" value={totals.activeAutomations} icon="Sparkle" tone="amber" badge="" />
+        <StatTile label="With email" value={loading ? "—" : totals.withEmail} icon="Mail" tone="blue" badge="" />
+        <StatTile label="With phone" value={loading ? "—" : totals.withPhone} icon="Phone" tone="blue" badge="" />
+        <StatTile label="Active automations" value={loading ? "—" : totals.activeAutomations} icon="Sparkle" tone="amber" badge="" />
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -344,7 +363,18 @@ export default function ContactsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
+            {/* Rows shaped like the ones arriving, so the table does not jump
+                and nothing has to be claimed about the data meanwhile. */}
+            {loading &&
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skeleton-${i}`} className="border-t border-slate-100">
+                  <td colSpan={9} className="px-3 py-2.5">
+                    <span className="block h-4 animate-pulse rounded bg-slate-100" />
+                  </td>
+                </tr>
+              ))}
+
+            {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-3 py-10 text-center">
                   {all.length === 0 ? (

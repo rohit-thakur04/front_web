@@ -8,12 +8,26 @@ import type { WabaTemplate } from "@/lib/types";
 import { PageHeader } from "@/components/ui";
 import { MessageSpend } from "@/components/MessageSpend";
 
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-700",
-  PENDING: "bg-amber-100 text-amber-800",
-  APPROVED: "bg-emerald-100 text-emerald-800",
-  REJECTED: "bg-red-100 text-red-800",
+/*
+Template status.
+
+Each one carries a ring and a dot as well as a fill. DRAFT's fill is
+near-white, so beside the amber and emerald pills it read as plain text rather
+than as a status at all — which matters because DRAFT is the one status meaning
+"Meta has never seen this", and it is the state a template is in when somebody
+is wondering why it has not been approved.
+
+The dot also carries the meaning without colour, for a reader who cannot
+separate the amber from the emerald.
+*/
+const STATUS_STYLES: Record<string, { pill: string; dot: string }> = {
+  DRAFT: { pill: "bg-slate-100 text-slate-700 ring-slate-300", dot: "bg-slate-400" },
+  PENDING: { pill: "bg-amber-100 text-amber-800 ring-amber-300", dot: "bg-amber-500" },
+  APPROVED: { pill: "bg-emerald-100 text-emerald-800 ring-emerald-300", dot: "bg-emerald-500" },
+  REJECTED: { pill: "bg-red-100 text-red-800 ring-red-300", dot: "bg-red-500" },
 };
+
+const STATUS_FALLBACK = { pill: "bg-slate-100 text-slate-700 ring-slate-300", dot: "bg-slate-400" };
 
 export default function WabaListPage() {
   const [templates, setTemplates] = useState<WabaTemplate[]>([]);
@@ -212,13 +226,17 @@ export default function WabaListPage() {
                 <td className="px-3 py-2 text-slate-600">{t.category}</td>
                 <td className="px-3 py-2 text-slate-600">{t.language}</td>
                 <td className="px-3 py-2">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                      STATUS_STYLES[t.status] ?? ""
-                    }`}
-                  >
-                    {t.status}
-                  </span>
+                  {(() => {
+                    const style = STATUS_STYLES[t.status] ?? STATUS_FALLBACK;
+                    return (
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${style.pill}`}
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
+                        {t.status}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <RowActions>

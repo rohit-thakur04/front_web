@@ -51,27 +51,42 @@ export function CommandPalette() {
     (t) => (!t.adminOnly || isAdmin) && (!t.feature || hasFeature(t.feature)),
   );
 
-  const close = useCallback(() => {
-    setOpen(false);
+  /** Everything the panel was holding, forgotten. */
+  const reset = useCallback(() => {
     setQuery("");
     setContacts([]);
     setActive(0);
   }, []);
 
-  // Ctrl-K and Cmd-K, plus Escape to leave. Bound to the window so it works
-  // from anywhere in the product rather than only when a field has focus.
+  const close = useCallback(() => {
+    setOpen(false);
+    reset();
+  }, [reset]);
+
+  /*
+   * Ctrl-K and Cmd-K, plus Escape to leave.
+   *
+   * Every close goes through close() rather than setOpen(false). Two of them
+   * did not, and since close() is the only thing that clears the query, a
+   * panel dismissed with Escape kept its text — so three searches in a row
+   * left the field reading "ramjiRohitaboard". Closing and clearing are one
+   * action and must not be two calls a caller has to remember.
+   */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        setOpen((wasOpen) => {
+          if (wasOpen) reset();
+          return !wasOpen;
+        });
         return;
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") close();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [close, reset]);
 
   // Opened from the top bar as well as the keyboard.
   useEffect(() => {
@@ -106,13 +121,23 @@ export function CommandPalette() {
         return;
       }
       try {
-        const found = await api<Card[]>(
-          `/contacts?search=${encodeURIComponent(term)}&limit=6`,
+        /*
+          /contacts answers with { contacts, summary }, not a bare array.
+
+          This asked for Card[] and then called .slice on it, which threw on
+          every single search — and the catch below turned that into an empty
+          result, so the panel quietly promised to search contacts and never
+          did. A catch that swallows a programming error as well as a network
+          one is how a broken feature looks like a working one with no matches,
+          so the shape is now named explicitly rather than assumed.
+        */
+        const res = await api<{ contacts: Card[] }>(
+          `/contacts?search=${encodeURIComponent(term)}`,
         );
-        if (live) setContacts(found.slice(0, 6));
+        if (live) setContacts((res.contacts ?? []).slice(0, 6));
       } catch {
-        // Search failing must not break navigation, which is the other half of
-        // what this panel is for.
+        // A failed search must not break navigation, which is the other half
+        // of what this panel is for.
         if (live) setContacts([]);
       }
     }, 180);
