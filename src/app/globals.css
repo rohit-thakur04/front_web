@@ -206,8 +206,8 @@ body {
   }
 
   &:focus {
-    border-color: var(--color-blue-500);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+    border-color: var(--ark-primary);
+    box-shadow: 0 0 0 3px var(--ark-focus);
   }
 
   &:disabled {
@@ -243,7 +243,7 @@ body {
     position at all for anyone not using a mouse.
   */
   :focus-visible {
-    outline: 2px solid var(--color-blue-500);
+    outline: 2px solid var(--ark-primary);
     outline-offset: 2px;
     border-radius: 2px;
   }
@@ -290,7 +290,7 @@ body {
 
   /* Text selection in the product's own accent rather than the browser's. */
   ::selection {
-    background-color: rgba(59, 130, 246, 0.22);
+    background-color: var(--ark-focus);
   }
 
   /*
@@ -437,30 +437,30 @@ html.dark body {
 }
 
 /* Surfaces */
-html.dark .bg-white { background-color: #171f2e !important; }
+html.dark .bg-white { background-color: var(--ark-surface) !important; }
 html.dark .bg-white\/80 { background-color: rgba(23, 31, 46, 0.8) !important; }
-html.dark .bg-slate-50 { background-color: #0f1626 !important; }
-html.dark .bg-slate-100 { background-color: #1f2937 !important; }
-html.dark .bg-slate-200 { background-color: #273449 !important; }
+html.dark .bg-slate-50 { background-color: var(--ark-bg) !important; }
+html.dark .bg-slate-100 { background-color: var(--ark-surface-2) !important; }
+html.dark .bg-slate-200 { background-color: var(--ark-surface-3) !important; }
 
 /* Hover surfaces */
-html.dark .hover\:bg-white:hover { background-color: #1f2937 !important; }
-html.dark .hover\:bg-slate-50:hover { background-color: #1c2536 !important; }
-html.dark .hover\:bg-slate-100:hover { background-color: #273449 !important; }
-html.dark .hover\:bg-slate-200:hover { background-color: #2f3d54 !important; }
+html.dark .hover\:bg-white:hover { background-color: var(--ark-surface-2) !important; }
+html.dark .hover\:bg-slate-50:hover { background-color: var(--ark-surface-2) !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: var(--ark-surface-3) !important; }
+html.dark .hover\:bg-slate-200:hover { background-color: var(--ark-line-strong) !important; }
 
 /* Borders */
-html.dark .border-slate-100 { border-color: #1e2635 !important; }
-html.dark .border-slate-200 { border-color: #2a3446 !important; }
-html.dark .border-slate-300 { border-color: #3a4661 !important; }
+html.dark .border-slate-100 { border-color: var(--ark-surface-2) !important; }
+html.dark .border-slate-200 { border-color: var(--ark-line) !important; }
+html.dark .border-slate-300 { border-color: var(--ark-line-strong) !important; }
 
 /* Neutral text */
-html.dark .text-slate-900 { color: #f1f5f9 !important; }
-html.dark .text-slate-800 { color: #e6edf5 !important; }
-html.dark .text-slate-700 { color: #d3dbe6 !important; }
-html.dark .text-slate-600 { color: #c2cbd8 !important; }
-html.dark .text-slate-500 { color: #97a3b6 !important; }
-html.dark .text-slate-400 { color: #8b98ab !important; }
+html.dark .text-slate-900 { color: var(--ark-ink) !important; }
+html.dark .text-slate-800 { color: var(--ark-ink) !important; }
+html.dark .text-slate-700 { color: var(--ark-ink-2) !important; }
+html.dark .text-slate-600 { color: var(--ark-ink-2) !important; }
+html.dark .text-slate-500 { color: var(--ark-ink-3) !important; }
+html.dark .text-slate-400 { color: var(--ark-ink-muted) !important; }
 
 /* Soft tint backgrounds → translucent so they read on dark */
 html.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.16) !important; }
@@ -515,21 +515,21 @@ html.dark .text-emerald-900 { color: #6ee7b7 !important; }
 html.dark .text-violet-700 { color: #c4b5fd !important; }
 
 /* Buttons/marks authored as slate-900 stay high-contrast on dark. */
-html.dark .bg-slate-900 { background-color: #2563eb !important; }
-html.dark .hover\:bg-slate-800:hover { background-color: #1d4ed8 !important; }
+html.dark .bg-slate-900 { background-color: var(--ark-primary) !important; }
+html.dark .hover\:bg-slate-800:hover { background-color: var(--ark-primary-hover) !important; }
 
 /* Native form controls default to white — force them dark. */
 html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 html.dark select,
 html.dark textarea {
-  background-color: #0f1626;
-  color: #e6edf5;
-  border-color: #2a3446;
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+  border-color: var(--ark-line);
 }
 html.dark .input {
-  background-color: #0f1626 !important;
-  border-color: #2a3446 !important;
-  color: #e6edf5 !important;
+  background-color: var(--ark-bg) !important;
+  border-color: var(--ark-line) !important;
+  color: var(--ark-ink) !important;
 }
 html.dark ::placeholder { color: #8b98ab; }
 
@@ -538,8 +538,8 @@ html.dark ::placeholder { color: #8b98ab; }
    keep its light-theme colour on the dark surface. */
 html.dark .input:hover:not(:disabled):not(:focus) { border-color: #45536f !important; }
 html.dark .input:focus {
-  border-color: var(--color-blue-500) !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+  border-color: var(--ark-primary) !important;
+  box-shadow: 0 0 0 3px var(--ark-focus) !important;
 }
 html.dark .input:disabled,
 html.dark input:disabled,
@@ -551,8 +551,8 @@ html.dark textarea:disabled {
 
 /* A light thumb reads correctly on the dark surfaces; the track stays
    transparent either way. */
-html.dark * { scrollbar-color: #3a4661 transparent; }
-html.dark *::-webkit-scrollbar-thumb { background-color: #3a4661; }
+html.dark * { scrollbar-color: var(--ark-line-strong) transparent; }
+html.dark *::-webkit-scrollbar-thumb { background-color: var(--ark-line-strong); }
 html.dark *::-webkit-scrollbar-thumb:hover { background-color: #4b5a79; }
 
 /* Hover text colours.
@@ -585,11 +585,57 @@ html.dark .group:hover .group-hover\:text-slate-900 { color: #f1f5f9 !important;
 html.dark .bg-black\/30,
 html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
 
+/*
+  --- One primary action ------------------------------------------------
+
+  An audit found the primary button teal on one screen and blue on thirteen.
+  The thirteen are not wrong individually — they are `bg-blue-600`, written
+  before there was a token to write instead — but a product whose main action
+  is two different colours does not look designed.
+
+  Only the FILLED action blues are redirected. The soft tints are left alone on
+  purpose: `bg-blue-50` with `text-blue-700` is an informational panel, and
+  turning every notice the same colour as every button would remove the one
+  distinction that makes a primary action primary.
+
+  Applied in both themes rather than only on dark, because this is the
+  inconsistency itself and not a dark-mode repair. It carries !important for
+  the same reason the dark remaps do: it has to beat a utility written directly
+  on the element, and the alternative is editing a hundred files.
+*/
+.bg-blue-600,
+.bg-blue-700 {
+  background-color: var(--ark-primary) !important;
+}
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-600:hover {
+  background-color: var(--ark-primary-hover) !important;
+}
+/* Borders and rings on those same action controls. */
+.border-blue-600,
+.focus-within\:border-blue-500:focus-within {
+  border-color: var(--ark-primary) !important;
+}
+.focus-within\:ring-blue-500\/20:focus-within {
+  --tw-ring-color: var(--ark-focus) !important;
+}
+
+/* The active nav pill and progress fills follow the same accent. */
+.bg-blue-600 {
+  color: var(--ark-primary-ink) !important;
+}
+
 /* --- Chart tokens -------------------------------------------------------
    Every value below was run through the dataviz validator against THIS app's
-   surfaces (#ffffff light, #171f2e dark — the colour html.dark gives .bg-white),
-   not a generic one: contrast and CVD results only mean anything against the
-   surface the chart actually renders on.
+   surfaces, not a generic one: contrast and CVD results only mean anything
+   against the surface the chart actually renders on.
+
+   Those surfaces moved. The dark one was #171f2e when `.bg-white` was remapped
+   to a cool navy; it is now the warm --ark-surface, so --viz-surface follows it
+   rather than describing a colour the app no longer paints. The series and ramp
+   values are unchanged: they were validated against a surface of roughly this
+   luminance, and re-stepping them is a job for the validator rather than for a
+   guess made while moving a background.
 
    Charts are written against these roles, never raw hex, so the light/dark swap
    happens in one place. The app themes by an html.dark class, so that is what
@@ -621,7 +667,7 @@ html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
 }
 
 html.dark .viz {
-  --viz-surface: #171f2e;
+  --viz-surface: var(--ark-surface);
   --viz-ink: #f1f5f9;
   --viz-ink-2: #c3c2b7;
   --viz-muted: #898781;
