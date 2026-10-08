@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/icons";
 import { SitesTab } from "@/components/leadgen/SitesTab";
+import { AIStudio } from "@/components/leadgen/AIStudio";
 import { FormsTab } from "@/components/leadgen/FormsTab";
 import { PlaceholderTab } from "@/components/leadgen/PlaceholderTab";
 import { URLsTab } from "@/components/leadgen/URLsTab";
@@ -13,7 +14,17 @@ import { URLsTab } from "@/components/leadgen/URLsTab";
 // catalog. A tab is shown only when the signed-in user's plan enables its
 // feature, so a restricted client sees only what they're entitled to.
 interface LeadGenTab {
-  key: string; // plan feature key
+  key: string; // tab id, and the plan feature key unless `feature` overrides it
+  /**
+   * The plan feature to check, when it differs from the tab id.
+   *
+   * AI Studio needs this: it is its own tab but it is gated on "sites", the
+   * same entitlement as the builder it writes pages for. Checking its own id
+   * instead would show the tab to a tenant whose plan excludes sites, and the
+   * server would then refuse every request with a message about AI rather than
+   * about their plan.
+   */
+  feature?: string;
   label: string; // tab label
   /**
    * Whether the tab leads to something built.
@@ -31,6 +42,9 @@ interface LeadGenTab {
 
 const TABS: LeadGenTab[] = [
   { key: "sites", label: "Sites", built: true },
+  // Beside Sites because writing a landing page is most of what it does, and
+  // the page it writes gets saved onto one.
+  { key: "sites_ai", label: "AI Studio", feature: "sites", built: true, isNew: true },
   { key: "forms", label: "Forms", built: true },
   { key: "urls", label: "URLs", built: true, isNew: true },
   { key: "shop", label: "Ecom" },
@@ -66,7 +80,10 @@ export default function LeadGenerationPage() {
   const requested = params.get("tab") ?? "";
 
   // Only tabs the plan allows are shown.
-  const tabs = useMemo(() => TABS.filter((t) => hasFeature(t.key)), [hasFeature]);
+  const tabs = useMemo(
+    () => TABS.filter((t) => hasFeature(t.feature ?? t.key)),
+    [hasFeature],
+  );
   const [active, setActive] = useState<string>("");
 
   /*
@@ -133,6 +150,8 @@ export default function LeadGenerationPage() {
 
       {current === "sites" ? (
         <SitesTab />
+      ) : current === "sites_ai" ? (
+        <AIStudio />
       ) : current === "forms" ? (
         <FormsTab />
       ) : current === "urls" ? (
