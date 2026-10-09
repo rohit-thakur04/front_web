@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { MultiSelect } from "@/components/leadgen/MultiSelect";
@@ -18,6 +18,11 @@ interface PublicForm {
   fields: FormField[];
   styles: FormStyles;
   theme: string;
+  /**
+   * "classic" lists every question on one page; "stepped" asks one at a time.
+   * Always set by the server, which normalises an unset value to classic.
+   */
+  layout: "classic" | "stepped";
 }
 
 
@@ -37,6 +42,60 @@ export default function PublicFormPage() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  /*
+   * Which step a stepped form is on.
+   *
+   * Stepped forms ask one question at a time. On a phone — where most of these
+   * are filled in — a six-question form is a wall of inputs somebody abandons,
+   * while one question with a progress bar gets finished. The fields and the
+   * submitted payload are identical either way, so a form can be switched
+   * after it has been shared without invalidating anything already collected.
+   */
+  const [step, setStep] = useState(0);
+
+  const stepped = form?.layout === "stepped";
+
+  /*
+   * One step per question, with any content blocks above it carried along.
+   *
+   * A heading or paragraph is not a question and cannot be a step of its own —
+   * that would make a visitor press Next to get past a sentence. Grouping each
+   * run of content with the question that follows it keeps the author's
+   * intended order while giving every step something to answer.
+   *
+   * Trailing content with no question after it becomes a final step, so a
+   * closing note is not silently dropped.
+   */
+  const groups = useMemo(() => {
+    if (!form) return [];
+    const out: { content: typeof form.fields; question?: (typeof form.fields)[number] }[] = [];
+    let pending: typeof form.fields = [];
+    for (const f of form.fields) {
+      if (isContentField(f)) {
+        pending.push(f);
+        continue;
+      }
+      out.push({ content: pending, question: f });
+      pending = [];
+    }
+    if (pending.length > 0) out.push({ content: pending });
+    return out;
+  }, [form]);
+
+  const lastStep = Math.max(groups.length - 1, 0);
+  const current = groups[Math.min(step, lastStep)];
+
+  /*
+   * Whether this step may be left.
+   *
+   * Client-side only: the server validates every answer on submit regardless,
+   * so this is about not letting somebody reach the end and be sent back, not
+   * about trust.
+   */
+  const canAdvance =
+    !current?.question ||
+    !current.question.required ||
+    (values[current.question.id] ?? "").trim() !== "";
 
   useEffect(() => {
     async function run() {
@@ -172,7 +231,17 @@ export default function PublicFormPage() {
             onChange={(e) => setHoneypot(e.target.value)}
           />
         </div>
-        {form.fields.map((f) =>
+        {stepped ? (
+          <SteppedFields
+            groups={groups}
+            step={step}
+            values={values}
+            onChange={(id, v) => setValues((prev) => ({ ...prev, [id]: v }))}
+            styles={s}
+            colors={c}
+          />
+        ) : (
+          form.fields.map((f) =>
           // A content block is markup, not a question: no label, no asterisk,
           // and nothing added to `values`, so it never reaches the submission.
           isContentField(f) ? (
@@ -198,7 +267,8 @@ export default function PublicFormPage() {
                 colors={c}
               />
             </div>
-          ),
+            ),
+          )
         )}
 
         {error && (
@@ -210,16 +280,144 @@ export default function PublicFormPage() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={sending}
-          className="mt-1 w-full py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-60"
-          style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
-        >
-          {sending ? "Sending…" : s.submitLabel || "Submit"}
-        </button>
+        {stepped && groups.length > 1 ? (
+          <div className="mt-1">
+            {/* Progress. A stepped form hides how much is left, which is the
+                one thing it costs a visitor over the single-page version —
+                so it has to be shown rather than implied. */}
+            <div className="mb-3 flex items-center gap-2">
+              <div
+                className="h-1 flex-1 overflow-hidden rounded-full"
+                style={{ background: c.inputBorder }}
+              >
+                <div
+                  className="h-full rounded-full transition-[width] duration-300"
+                  style={{
+                    width: `${((step + 1) / groups.length) * 100}%`,
+                    background: c.button,
+                  }}
+                />
+              </div>
+              <span className="text-xs tabular-nums opacity-60">
+                {step + 1} / {groups.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {step > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStep((n) => Math.max(n - 1, 0))}
+                  className="py-3 px-4 text-sm font-medium transition hover:opacity-80"
+                  style={{ borderRadius: radius, border: `1px solid ${c.inputBorder}` }}
+                >
+                  Back
+                </button>
+              )}
+
+              {step < lastStep ? (
+                /*
+                  type="button", deliberately.
+
+                  A submit button here would end the form on the first question
+                  — and because the browser also submits on Enter, a visitor
+                  typing their name and pressing Enter would have sent a
+                  one-field enquiry.
+                */
+                <button
+                  type="button"
+                  disabled={!canAdvance}
+                  onClick={() => setStep((n) => Math.min(n + 1, lastStep))}
+                  className="flex-1 py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-50"
+                  style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="flex-1 py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-60"
+                  style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
+                >
+                  {sending ? "Sending…" : s.submitLabel || "Submit"}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <button
+            type="submit"
+            disabled={sending}
+            className="mt-1 w-full py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-60"
+            style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
+          >
+            {sending ? "Sending…" : s.submitLabel || "Submit"}
+          </button>
+        )}
       </form>
     </>,
+  );
+}
+
+/*
+SteppedFields renders the current step only.
+
+Every other step is unmounted rather than hidden, so a visitor cannot tab into
+a question that is not on screen — which is what display:none would allow and
+is a genuine trap for anybody navigating by keyboard.
+
+The answers live in the parent, so going Back and forward again shows what was
+already typed. Nothing is submitted until the last step.
+*/
+function SteppedFields({
+  groups,
+  step,
+  values,
+  onChange,
+  styles,
+  colors,
+}: {
+  groups: { content: PublicForm["fields"]; question?: PublicForm["fields"][number] }[];
+  step: number;
+  values: Record<string, string>;
+  onChange: (fieldId: string, value: string) => void;
+  styles: PublicForm["styles"];
+  colors: { inputBg: string; inputText: string; inputBorder: string };
+}) {
+  const group = groups[Math.min(step, Math.max(groups.length - 1, 0))];
+  if (!group) return null;
+
+  return (
+    <div className="mb-5">
+      {group.content.map((f) => (
+        <div
+          key={f.id}
+          className="mb-5"
+          // Same invariant as the single-page renderer: the server sanitizes
+          // every save, so this markup has already had scripts removed.
+          dangerouslySetInnerHTML={{ __html: f.html ?? "" }}
+        />
+      ))}
+
+      {group.question && (
+        <div>
+          {/* One question gets room to be a question: larger than the stacked
+              version, because it is the only thing on screen. */}
+          <label className="mb-2 block text-base font-medium">
+            {group.question.label}
+            {group.question.required && <span style={{ color: "#e11d48" }}> *</span>}
+          </label>
+          <Field
+            field={group.question}
+            value={values[group.question.id] ?? ""}
+            onChange={(v) => onChange(group.question!.id, v)}
+            styles={styles}
+            colors={colors}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

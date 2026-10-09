@@ -221,6 +221,14 @@ export interface Form {
   fields: FormField[];
   styles: FormStyles;
   theme: string;
+  /**
+   * How the form is presented to a visitor.
+   *
+   * "classic" lists every question on one page; "stepped" asks one at a time,
+   * which is what gets finished on a phone. The fields and the submission are
+   * identical either way, so this is switchable after the form is shared.
+   */
+  layout?: "classic" | "stepped";
   createdAt: string;
   updatedAt: string;
 }

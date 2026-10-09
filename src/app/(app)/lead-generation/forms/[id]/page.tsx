@@ -172,6 +172,7 @@ export default function FormBuilderPage() {
           fields: form.fields,
           styles: form.styles,
           theme: form.theme,
+          layout: form.layout ?? "classic",
         },
       });
       setForm(saved);
@@ -375,10 +376,12 @@ export default function FormBuilderPage() {
                 styles={form.styles}
                 themes={catalog.themes}
                 activeTheme={form.theme}
+                layout={form.layout ?? "classic"}
                 tab={rightTab}
                 onTab={setRightTab}
                 onChange={(styles) => patch({ styles })}
                 onTheme={applyTheme}
+                onLayout={(layout) => patch({ layout })}
               />
             )}
           </div>
@@ -736,24 +739,69 @@ function StylePanel({
   styles,
   themes,
   activeTheme,
+  layout,
   tab,
   onTab,
   onChange,
   onTheme,
+  onLayout,
 }: {
   styles: FormStyles;
   themes: FormTheme[];
   activeTheme: string;
+  layout: "classic" | "stepped";
   tab: "customize" | "themes";
   onTab: (t: "customize" | "themes") => void;
   onChange: (styles: FormStyles) => void;
   onTheme: (t: FormTheme) => void;
+  onLayout: (l: "classic" | "stepped") => void;
 }) {
   const set = (p: Partial<FormStyles>) => onChange({ ...styles, ...p });
 
   return (
     <div>
       <h3 className="mb-3 font-semibold">Styles &amp; Options</h3>
+
+      {/* Layout sits above the style tabs because it is not styling: it
+          changes how the form is answered, not how it looks. */}
+      <div className="mb-4">
+        <p className="mb-1.5 text-sm font-medium">Layout</p>
+        <div className="space-y-1.5">
+          {(
+            [
+              ["classic", "All questions on one page", "Everything visible at once. Best for two or three short fields."],
+              ["stepped", "One question at a time", "A progress bar and a Next button. Gets finished far more often on a phone."],
+            ] as const
+          ).map(([key, label, blurb]) => (
+            <label
+              key={key}
+              className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 transition ${
+                layout === key
+                  ? "border-blue-500 ring-1 ring-blue-200"
+                  : "border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="form-layout"
+                checked={layout === key}
+                onChange={() => onLayout(key)}
+                className="mt-0.5"
+              />
+              <span className="text-sm">
+                <span className="font-medium">{label}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{blurb}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-1.5 text-xs text-slate-500">
+          {/* Said plainly because it is the question somebody asks before
+              changing it on a form that is already collecting leads. */}
+          Switching this does not change the questions or anything already
+          collected.
+        </p>
+      </div>
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
         <button
           onClick={() => onTab("customize")}
