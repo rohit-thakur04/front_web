@@ -1003,6 +1003,29 @@ function ShareOverlay({ form, onClose }: { form: Form; onClose: () => void }) {
           </button>
         </div>
 
+        {/*
+          A draft form's public URL returns 404, by design — an unpublished
+          form must not be readable by strangers.
+
+          But it was handed out here with nothing saying so, which is a trap
+          rather than a safeguard: somebody copies this link, puts it on a live
+          site or a WhatsApp broadcast, and every visitor gets a 404 while the
+          builder shows a perfectly healthy form. No lead is created and nothing
+          anywhere reports a problem, because from the server's point of view
+          none of this is an error.
+
+          The product knew the status all along; it simply never mentioned it at
+          the one moment it mattered.
+        */}
+        {form.status !== "published" && (
+          <div className="mb-4 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+            <strong className="font-medium">This form is a draft.</strong> The link
+            below will show a “not found” page to anyone who opens it, and no
+            lead will be created. Publish the form first — then this link starts
+            working immediately, with no need to share it again.
+          </div>
+        )}
+
         <label className="mb-1 block text-sm font-medium">Public URL</label>
         <div className="flex gap-2">
           <input readOnly value={url} className="input font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
