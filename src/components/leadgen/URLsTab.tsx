@@ -17,6 +17,28 @@ import type { ShortURL } from "@/lib/types";
  * The fallback keeps the row readable against an older API build that does not
  * send the field.
  */
+/**
+ * How a link rotates, phrased the way the form phrased it.
+ *
+ * Reads the stored minutes back into the largest whole unit that divides it, so
+ * a weekly rotation says "every 7 days" rather than "every 10080 minutes".
+ */
+function rotationLabel(link: ShortURL): string {
+  const count = link.destinations?.length ?? 0;
+  switch (link.rotationMode) {
+    case "clicks":
+      return `Rotating ${count} · every ${link.rotateEveryClicks ?? 0} clicks`;
+    case "time": {
+      const mins = link.rotateEveryMinutes ?? 0;
+      if (mins > 0 && mins % 1440 === 0) return `Rotating ${count} · every ${mins / 1440}d`;
+      if (mins > 0 && mins % 60 === 0) return `Rotating ${count} · every ${mins / 60}h`;
+      return `Rotating ${count} · every ${mins}m`;
+    }
+    default:
+      return `Rotating ${count} · split`;
+  }
+}
+
 function shortLink(link: ShortURL) {
   return link.shortUrl || `/r/${link.code}`;
 }
@@ -42,6 +64,17 @@ export function URLsTab() {
   // above, but it still needs a weight or a rotation can only ever favour the
   // destinations added second.
   const [primaryWeight, setPrimaryWeight] = useState("1");
+  /*
+   * How the rotation advances. Three modes, because the three things clients
+   * want from one rotating link differ in kind: split traffic now, hand each
+   * destination a run of clicks, or move on by the clock.
+   */
+  const [mode, setMode] = useState<"weighted" | "clicks" | "time">("weighted");
+  const [everyClicks, setEveryClicks] = useState("100");
+  // Held in the unit the client chose and converted to minutes on save — "7
+  // days" is how somebody describes a weekly rotation, not "10080 minutes".
+  const [everyCount, setEveryCount] = useState("7");
+  const [everyUnit, setEveryUnit] = useState<"minutes" | "hours" | "days">("days");
 
   async function load() {
     try {
@@ -89,9 +122,25 @@ export function URLsTab() {
             ]
           : undefined;
 
+      const UNIT_MINUTES = { minutes: 1, hours: 60, days: 1440 } as const;
       const link = await api<ShortURL>("/urls", {
         method: "POST",
-        body: { targetUrl: target, title, campaign, code, destinations },
+        body: {
+          targetUrl: target,
+          title,
+          campaign,
+          code,
+          destinations,
+          // Only sent with a rotation; a single-destination link has no mode.
+          ...(destinations
+            ? {
+                rotationMode: mode,
+                rotateEveryClicks: Number(everyClicks) || 0,
+                rotateEveryMinutes:
+                  (Number(everyCount) || 0) * UNIT_MINUTES[everyUnit],
+              }
+            : {}),
+        },
       });
       // Prepend rather than refetch: the list is sorted newest-first anyway.
       setLinks((prev) => [link, ...prev]);
@@ -188,10 +237,83 @@ export function URLsTab() {
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="mb-2 text-sm font-medium">Rotate between destinations</p>
+              {/* How the rotation advances, chosen before the destinations are
+                  listed, because it changes what the fields beside each one
+                  mean — weights only apply to the proportional mode. */}
+              <div className="mb-3 space-y-2">
+                {(
+                  [
+                    ["weighted", "Split every click", "Shared out in proportion to the weights. Two reps on 1 and 1 get half each."],
+                    ["clicks", "Switch after N clicks", "One destination stays live until it has had its quota, then the link moves on."],
+                    ["time", "Switch on a schedule", "Moves on by the clock, whether or not anybody clicked."],
+                  ] as const
+                ).map(([key, label, blurb]) => (
+                  <label
+                    key={key}
+                    className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 transition-colors ${
+                      mode === key
+                        ? "border-blue-500 bg-white"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rotation-mode"
+                      checked={mode === key}
+                      onChange={() => setMode(key)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">{label}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{blurb}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {mode === "clicks" && (
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span>Move on after</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={everyClicks}
+                    onChange={(e) => setEveryClicks(e.target.value)}
+                    className="input w-20"
+                  />
+                  <span>clicks on each destination.</span>
+                </div>
+              )}
+
+              {mode === "time" && (
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span>Each destination stays live for</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={everyCount}
+                    onChange={(e) => setEveryCount(e.target.value)}
+                    className="input w-20"
+                  />
+                  <select
+                    value={everyUnit}
+                    onChange={(e) =>
+                      setEveryUnit(e.target.value as "minutes" | "hours" | "days")
+                    }
+                    className="input w-auto"
+                  >
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </select>
+                  <span>, then the link moves on by itself.</span>
+                </div>
+              )}
+
               <p className="mb-3 text-xs text-slate-500">
-                Clicks are shared out in proportion to the weights — two sales reps on 1 and 1
-                get half each, and 3 against 1 sends three quarters to the first. The URL above
-                is the first destination.
+                The URL at the top of this form is the first destination.
+                {mode !== "weighted" &&
+                  " Weights are ignored in this mode — each destination gets an equal turn."}
               </p>
 
               <div className="space-y-2">
@@ -341,8 +463,12 @@ export function URLsTab() {
                          what, so the per-destination tallies are the content
                          here rather than a single URL that is only the first. */
                       <div className="space-y-0.5">
+                        {/* The mode matters as much as the count: "rotating
+                            between 3" says nothing about whether a click goes
+                            somewhere different each time or whether the link
+                            changes weekly. */}
                         <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium">
-                          Rotating · {l.destinations.length}
+                          {rotationLabel(l)}
                         </span>
                         {l.destinations.map((d, i) => (
                           <p key={i} className="truncate text-xs" title={d.url}>

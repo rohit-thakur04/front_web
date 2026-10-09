@@ -630,6 +630,16 @@ export interface ShortURL {
    * which is what every link created before rotation is.
    */
   destinations?: LinkDestination[] | null;
+  /**
+   * How the rotation advances.
+   *
+   * "weighted" splits every click proportionally; "clicks" gives each
+   * destination a run of clicks before moving on; "time" moves on by the clock
+   * whether or not anybody clicked. Absent means weighted.
+   */
+  rotationMode?: "weighted" | "clicks" | "time" | null;
+  rotateEveryClicks?: number;
+  rotateEveryMinutes?: number;
   clicks: number;
   lastClickedAt?: string | null;
   /** The whole link to hand out, resolved server-side. See Funnel.publicUrl. */
