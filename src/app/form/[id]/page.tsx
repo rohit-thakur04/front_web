@@ -52,6 +52,14 @@ export default function PublicFormPage() {
    * after it has been shared without invalidating anything already collected.
    */
   const [step, setStep] = useState(0);
+  /*
+   * Whether this step has been blocked.
+   *
+   * Set when Next is pressed on an unanswered required question, cleared on
+   * every step change. Not shown before that: nagging somebody about a field
+   * they have not filled in yet reads as the form arguing with them.
+   */
+  const [blocked, setBlocked] = useState(false);
 
   const stepped = form?.layout === "stepped";
 
@@ -236,7 +244,12 @@ export default function PublicFormPage() {
             groups={groups}
             step={step}
             values={values}
-            onChange={(id, v) => setValues((prev) => ({ ...prev, [id]: v }))}
+            onChange={(id, v) => {
+              // Typing an answer clears the complaint about not having one.
+              if (blocked) setBlocked(false);
+              setValues((prev) => ({ ...prev, [id]: v }));
+            }}
+            blockedLabel={blocked ? current?.question?.label : undefined}
             styles={s}
             colors={c}
           />
@@ -307,7 +320,10 @@ export default function PublicFormPage() {
               {step > 0 && (
                 <button
                   type="button"
-                  onClick={() => setStep((n) => Math.max(n - 1, 0))}
+                  onClick={() => {
+                    setBlocked(false);
+                    setStep((n) => Math.max(n - 1, 0));
+                  }}
                   className="py-3 px-4 text-sm font-medium transition hover:opacity-80"
                   style={{ borderRadius: radius, border: `1px solid ${c.inputBorder}` }}
                 >
@@ -326,9 +342,24 @@ export default function PublicFormPage() {
                 */
                 <button
                   type="button"
-                  disabled={!canAdvance}
-                  onClick={() => setStep((n) => Math.min(n + 1, lastStep))}
-                  className="flex-1 py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90 disabled:opacity-50"
+                  /*
+                    Enabled even when it will not advance, deliberately.
+
+                    It was disabled, which meant pressing it on an unanswered
+                    required question did nothing and said nothing — and with
+                    one field on screen there was no other field to compare
+                    against and no way to guess what was wrong. A control that
+                    explains the obstacle beats one that cannot be pressed.
+                  */
+                  onClick={() => {
+                    if (!canAdvance) {
+                      setBlocked(true);
+                      return;
+                    }
+                    setBlocked(false);
+                    setStep((n) => Math.min(n + 1, lastStep));
+                  }}
+                  className="flex-1 py-3 text-sm font-semibold uppercase tracking-wide transition hover:opacity-90"
                   style={{ background: c.button, color: c.buttonText, borderRadius: radius }}
                 >
                   Next
@@ -375,6 +406,7 @@ function SteppedFields({
   step,
   values,
   onChange,
+  blockedLabel,
   styles,
   colors,
 }: {
@@ -382,6 +414,8 @@ function SteppedFields({
   step: number;
   values: Record<string, string>;
   onChange: (fieldId: string, value: string) => void;
+  /** The question's own label when Next was pressed without an answer. */
+  blockedLabel?: string;
   styles: PublicForm["styles"];
   colors: { inputBg: string; inputText: string; inputBorder: string };
 }) {
@@ -415,6 +449,16 @@ function SteppedFields({
             styles={styles}
             colors={colors}
           />
+          {/* Reserved height, so showing or clearing this never moves the
+              button below it. A control that shifts between mousedown and
+              mouseup swallows the click entirely. */}
+          <p
+            className="mt-1.5 min-h-[20px] text-sm"
+            role={blockedLabel ? "alert" : undefined}
+            style={{ color: "#e11d48" }}
+          >
+            {blockedLabel ? `${blockedLabel} is required.` : ""}
+          </p>
         </div>
       )}
     </div>
