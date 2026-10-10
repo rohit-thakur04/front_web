@@ -145,7 +145,22 @@ export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
           ←
         </button>
         <span className="font-semibold">{funnel.name}</span>
-        <span className="text-xs text-slate-400">Home</span>
+        {/*
+          Which page is open.
+
+          This said "Home" unconditionally, so editing the thank-you page
+          showed the funnel name followed by "Home". The editor was targeting
+          the right page — saves landed correctly — but the label disagreed, and
+          QA's note was that somebody will eventually overwrite the wrong page
+          because of it. The page was already passed in; it was simply not read.
+
+          The path is shown alongside the name because two pages can share a
+          name and only the path says which address is being edited.
+        */}
+        <span className="text-xs text-slate-400">
+          {page?.name || "Home"}
+          {page && page.path ? ` · /${page.path}` : ""}
+        </span>
 
         {/* Mode switch */}
         <div className="ml-2 flex overflow-hidden rounded-lg border border-slate-300">

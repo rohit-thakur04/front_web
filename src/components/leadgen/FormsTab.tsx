@@ -303,29 +303,50 @@ function CreateFormDialog({
             <span className="mt-1 text-xs text-slate-500">{busy ? "Creating…" : "Build a blank form"}</span>
           </button>
 
+          {/*
+            Not built, and now saying so on screen.
+
+            It carried a cursor and a tooltip, which is no signal at all on a
+            touch device — there is no pointer to change and nothing to hover.
+            A badge works everywhere.
+
+            The old subtitle read "20+ ready-to-use forms". Those templates do
+            not exist, and advertising a quantity of something unbuilt is the
+            kind of claim that should not ship.
+          */}
           <div
-            title="Templates are not available yet"
-            className="flex cursor-not-allowed flex-col items-center rounded-xl border border-slate-200 p-6 text-center opacity-60"
+            aria-disabled="true"
+            className="relative flex cursor-not-allowed flex-col items-center rounded-xl border border-dashed border-slate-300 p-6 text-center opacity-70"
           >
+            <span className="absolute top-2 right-2 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              Coming soon
+            </span>
             <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-500">
               ▤
             </span>
             <span className="font-semibold">From Templates</span>
-            <span className="mt-1 text-xs text-slate-500">20+ ready-to-use forms</span>
+            <span className="mt-1 text-xs text-slate-500">
+              Prebuilt forms are not available yet
+            </span>
           </div>
 
           <div
-            title="AI Builder is not available yet"
-            className="relative flex cursor-not-allowed flex-col items-center rounded-xl border border-slate-200 p-6 text-center opacity-60"
+            aria-disabled="true"
+            className="relative flex cursor-not-allowed flex-col items-center rounded-xl border border-dashed border-slate-300 p-6 text-center opacity-70"
           >
-            <span className="absolute right-2 top-2 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-              AI
+            <span className="absolute top-2 right-2 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              Coming soon
             </span>
             <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600">
               ✨
             </span>
             <span className="font-semibold">AI Builder</span>
-            <span className="mt-1 text-xs text-slate-500">Describe &amp; generate</span>
+            {/* Names the dependency rather than only the absence, so somebody
+                who has connected a provider knows this is not waiting on them.
+                AI Studio writes pages and copy today, not forms. */}
+            <span className="mt-1 text-xs text-slate-500">
+              Generating forms is not built yet
+            </span>
           </div>
         </div>
       </div>

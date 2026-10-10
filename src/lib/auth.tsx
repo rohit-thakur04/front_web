@@ -98,6 +98,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }, [router]);
 
+  /*
+   * Silent session renewal.
+   *
+   * The token has a fixed life and nothing renewed it, so a user working for
+   * longer than that life was signed out mid-task — and with no password reset
+   * page, recovery meant asking someone with database access.
+   *
+   * Renewed on an interval rather than on a timer derived from the token's
+   * expiry, because the token is opaque to this layer and decoding a JWT in the
+   * browser to read its own expiry is more machinery than the problem needs.
+   * Twenty minutes is comfortably inside any expiry anybody would configure and
+   * costs one request per third of an hour.
+   *
+   * A failure is swallowed: the next real request will fail with a 401 and the
+   * existing handling signs the user out. Reacting here as well would mean two
+   * code paths deciding when a session has ended.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    const RENEW_EVERY = 20 * 60 * 1000;
+    const timer = setInterval(async () => {
+      try {
+        const res = await api<{ token: string }>("/auth/refresh", { method: "POST" });
+        if (res.token) setToken(res.token);
+      } catch {
+        // Left to the next request, which already handles a dead session.
+      }
+    }, RENEW_EVERY);
+
+    return () => clearInterval(timer);
+  }, [user]);
+
   const hasFeature = useCallback(
     (key: string) => {
       if (!features) return true; // not gated

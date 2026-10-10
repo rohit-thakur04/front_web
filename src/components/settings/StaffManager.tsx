@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Toggle } from "@/components/ui";
@@ -68,8 +69,18 @@ export function StaffManager() {
         <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
           {user.role === "staff"
             ? "Your access is set by the account owner who created your login."
-            : "Staff belong to a client account. Sign in as a client to add team members."}
+            : "Staff belong to a client account. Open the client from Clients to see who has access."}
         </p>
+        {/* A way onward, not just an explanation. An admin arriving here wanted
+            to manage somebody's access, and Clients is where that starts. */}
+        {user.role === "admin" && (
+          <Link
+            href="/clients"
+            className="mt-4 inline-block rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          >
+            Go to Clients
+          </Link>
+        )}
       </div>
     );
   }
