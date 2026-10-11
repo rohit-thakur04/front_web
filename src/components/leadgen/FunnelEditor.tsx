@@ -65,6 +65,62 @@ export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
   const [savedHtml, setSavedHtml] = useState(page?.html ?? funnel.html);
   const dirty = html !== savedHtml;
 
+  /*
+   * Reads the saved content of the page being edited out of a server response.
+   *
+   * This used to take `updated.html`, which is the funnel's legacy top-level
+   * field and mirrors the HOME page. Editing any other page, it never matched
+   * what was just saved, so `dirty` stayed true forever and "Unsaved changes"
+   * sat in the header after a save that had reported "Saved." — and after a
+   * successful publish.
+   *
+   * Falls back to the legacy field only when there is no page to find, which is
+   * a funnel predating multi-page support.
+   */
+  function savedHTMLFor(updated: Funnel): string {
+    const id = page?.id;
+    if (id) {
+      const match = updated.pages?.find((p) => p.id === id);
+      if (match) return match.html;
+    }
+    return updated.html;
+  }
+
+  /*
+   * Load the right content when the editor is handed a different page, or when
+   * the page it was opened with finally arrives.
+   *
+   * useState reads its initial value once, so an editor mounted before the
+   * funnel finished loading kept showing whatever it had then — which is how a
+   * Publish pressed a few seconds after opening could put a version live that
+   * was not the one on screen.
+   *
+   * Adjusted during render rather than in an effect: this is React's own
+   * pattern for deriving state from a changed prop, it avoids a frame showing
+   * the wrong page, and it does not fight the lint rule against setting state
+   * in an effect.
+   *
+   * Keyed on the page id alone, deliberately. Keying on its html as well would
+   * mean every save pushed the server's copy back into the editor and
+   * overwrote whatever had been typed since.
+   */
+  const [loadedPageID, setLoadedPageID] = useState(page?.id ?? "");
+  if ((page?.id ?? "") !== loadedPageID) {
+    const incoming = page?.html ?? funnel.html;
+    setLoadedPageID(page?.id ?? "");
+    setHtml(incoming);
+    setSavedHtml(incoming);
+  }
+
+  /*
+   * Nothing may be saved or published until the editor is holding a real page.
+   *
+   * A funnel that reports pages but has not handed one over yet is still
+   * loading, and publishing from that state is exactly what put the previous
+   * version live while reporting success.
+   */
+  const loading = Boolean(funnel.pages?.length) && !page;
+
   const lineCount = html ? html.split("\n").length : 0;
 
   async function save(): Promise<boolean> {
@@ -78,7 +134,7 @@ export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
         // the server writes to home, which is the old single-page behaviour.
         body: { html, pageId: page?.id },
       });
-      setSavedHtml(updated.html);
+      setSavedHtml(savedHTMLFor(updated));
       onChange(updated);
       setNotice("Saved.");
       return true;
@@ -96,7 +152,7 @@ export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
     try {
       if (dirty && !(await save())) return;
       const published = await api<Funnel>(`/funnels/${funnel._id}/publish`, { method: "POST" });
-      setSavedHtml(published.html);
+      setSavedHtml(savedHTMLFor(published));
       onChange(published);
       // Names the address, because that is the question a client asks the moment
       // they press Publish and the product never used to answer it.
@@ -212,17 +268,26 @@ export function FunnelEditor({ funnel, page, onExit, onChange }: Props) {
           </button>
           <button
             onClick={save}
-            disabled={saving || !dirty}
+            disabled={saving || loading || !dirty}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
           </button>
           <button
             onClick={publish}
-            disabled={publishing}
+            /*
+              Blocked while the editor has no page yet.
+
+              Publishing from a half-loaded editor is what put the previous
+              version live while reporting success and moving the Last
+              published timestamp — the worst kind of failure, because the
+              product said it had worked.
+            */
+            disabled={publishing || loading}
+            title={loading ? "Still loading this page" : undefined}
             className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {publishing ? "Publishing…" : "✦ Publish"}
+            {publishing ? "Publishing…" : loading ? "Loading…" : "✦ Publish"}
           </button>
         </div>
       </div>
