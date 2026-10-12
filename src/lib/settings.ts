@@ -27,7 +27,7 @@ export const SETTINGS_TILES: SettingsTile[] = [
   { section: "fields", title: "Fields", description: "Create custom fields for contacts, companies, and records.", icon: "Dashboard" },
   { section: "templates", title: "Templates", description: "Reusable templates for notes, outreach, and documents.", icon: "Mail" },
   { section: "app-store", title: "App Store", description: "Connect Google, Meta, WhatsApp, Zoom, and AI providers.", icon: "Layers", live: true },
-  { section: "domains", title: "Domains", description: "Map custom domains, subdomains, and DNS records.", icon: "Chat" },
+  { section: "domains", title: "Domains", description: "Serve your pages and short links on your own domain.", icon: "ExternalLink", live: true },
   { section: "wallet", title: "Wallet", description: "Top up credits and review wallet transactions.", icon: "Money" },
   { section: "analytics", title: "Analytics", description: "Cross-module performance, revenue, and insights.", icon: "Percent" },
   { section: "deleted", title: "Deleted Items", description: "Restore items deleted in the last 30 days.", icon: "Refresh" },
