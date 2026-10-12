@@ -8,6 +8,7 @@ import {
 } from "@hello-pangea/dnd";
 import { StrictModeDroppable as Droppable } from "./StrictModeDroppable";
 import { api } from "@/lib/api";
+import { useAsk } from "@/components/PromptProvider";
 import { RowAction, RowActions } from "@/components/RowActions";
 import type {
   BoardAutomation,
@@ -45,6 +46,7 @@ export function Board({
   filter,
   filtering,
 }: Props) {
+  const ask = useAsk();
   const [editing, setEditing] = useState<{ stageId: string; card?: Card } | null>(
     null,
   );
@@ -152,7 +154,14 @@ export function Board({
   }
 
   async function addStage() {
-    const name = window.prompt("Column name");
+    const name = await ask({
+      title: "New column",
+      label: "Column name",
+      placeholder: "Qualified",
+      hint: "A column is a stage. Moving a contact into it starts that stage's follow-up.",
+      confirmLabel: "Add column",
+      required: true,
+    });
     if (!name?.trim()) return;
     try {
       await api<Stage>(`/pipelines/${pipelineId}/stages`, {

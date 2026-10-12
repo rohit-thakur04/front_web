@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAsk } from "@/components/PromptProvider";
 import type { BoardAutomation, BoardResponse, Pipeline, Stage } from "@/lib/types";
 import { Board } from "@/components/Board";
 import { Icon } from "@/components/icons";
@@ -23,6 +24,7 @@ import { exportContacts, exportMessage } from "@/lib/contactsExport";
 const POLL_MS = 15_000;
 
 export default function BoardPage() {
+  const ask = useAsk();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [board, setBoard] = useState<BoardResponse | null>(null);
@@ -123,7 +125,14 @@ export default function BoardPage() {
   }
 
   async function createPipeline() {
-    const name = window.prompt("Pipeline name");
+    const name = await ask({
+      title: "New pipeline",
+      label: "Pipeline name",
+      placeholder: "Sales",
+      hint: "You can rename it later. Contacts live inside a pipeline's stages.",
+      confirmLabel: "Create pipeline",
+      required: true,
+    });
     if (!name?.trim()) return;
     try {
       const created = await api<Pipeline>("/pipelines", {

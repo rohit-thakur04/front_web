@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PromptProvider } from "@/components/PromptProvider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -28,6 +29,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
+    /* Wraps the whole app so any screen can ask for a value without mounting
+       its own dialog, and so there is exactly one at a time. */
+    <PromptProvider>
     <div className="min-h-screen bg-[var(--ark-bg)]">
       {/* Mounted in the shell rather than per page, so the shortcut works from
           anywhere in the product. */}
@@ -49,5 +53,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main>{children}</main>
       </div>
     </div>
+    </PromptProvider>
   );
 }

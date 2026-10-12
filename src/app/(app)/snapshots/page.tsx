@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAsk } from "@/components/PromptProvider";
 import { PageHeader } from "@/components/ui";
 import { RowAction, RowActions } from "@/components/RowActions";
 import type { User } from "@/lib/types";
@@ -48,6 +49,7 @@ that a snapshot might email a brand-new client's contacts — is exactly what
 would stop them using the feature at all.
 */
 export default function SnapshotsPage() {
+  const ask = useAsk();
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [accounts, setAccounts] = useState<User[]>([]);
   const [error, setError] = useState("");
@@ -106,14 +108,20 @@ export default function SnapshotsPage() {
 
   async function apply(snap: Snapshot) {
     /*
-     * A prompt rather than a dialog, deliberately kept for now: the id is the
-     * unambiguous way to name an account, and applying to the wrong one has to
-     * be unpicked by hand. A picker is the obvious next step.
+     * A picker, not a pasted id.
+     *
+     * Asking somebody to read an id out of a list and type it back is how a
+     * snapshot gets applied to the wrong client — which then has to be unpicked
+     * by hand, since applying is additive and has no undo.
      */
-    const list = accounts.map((a) => `${a.name || a.email} — ${a._id}`).join("\n");
-    const target = window.prompt(
-      `Apply "${snap.name}" to which account? Paste the id.\n\n${list}`,
-    );
+    const target = await ask({
+      title: `Apply "${snap.name}"`,
+      label: "Apply it to which account?",
+      options: accounts.map((a) => ({ value: a._id, label: a.name || a.email })),
+      hint: "Everything arrives as a draft. Nothing sends until it is published there.",
+      confirmLabel: "Apply snapshot",
+      required: true,
+    });
     if (!target?.trim()) return;
 
     setBusy(true);

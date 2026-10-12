@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAsk } from "@/components/PromptProvider";
 import type { Funnel, FunnelPage } from "@/lib/types";
 import { FunnelEditor } from "@/components/leadgen/FunnelEditor";
 import { Icon } from "@/components/icons";
@@ -18,6 +19,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 
 export default function FunnelDetailPage() {
+  const ask = useAsk();
   const params = useParams<{ id: string }>();
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [tab, setTab] = useState<Tab>("pages");
@@ -73,7 +75,22 @@ export default function FunnelDetailPage() {
   const selectedPage = pages.find((p) => p.id === selectedPageId) ?? pages[0];
 
   async function addPage() {
-    const name = window.prompt("Page name", "Thank you");
+    /*
+      An in-app dialog, not window.prompt.
+
+      This is the "+" that QA recorded freezing a tab hard enough that it could
+      not be recovered, with the endpoint behind it working correctly when
+      called directly. window.prompt blocks the renderer including React's work
+      loop, which is the obvious cause and is gone now.
+    */
+    const name = await ask({
+      title: "Add a page",
+      label: "Page name",
+      defaultValue: "Thank you",
+      hint: "Its address is made from the name — \"Thank you\" becomes /thank-you.",
+      confirmLabel: "Add page",
+      required: true,
+    });
     if (!name?.trim()) return;
     setAddingPage(true);
     setError("");
@@ -95,7 +112,14 @@ export default function FunnelDetailPage() {
   }
 
   async function renamePage(page: FunnelPage) {
-    const name = window.prompt("Page name", page.name);
+    const name = await ask({
+      title: "Rename page",
+      label: "Page name",
+      defaultValue: page.name,
+      hint: "Renaming does not change the page's address, so shared links keep working.",
+      confirmLabel: "Rename",
+      required: true,
+    });
     if (!name?.trim() || name.trim() === page.name) return;
     try {
       setFunnel(

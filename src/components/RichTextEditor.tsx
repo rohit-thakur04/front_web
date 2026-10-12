@@ -1,5 +1,7 @@
 "use client";
 
+import { useAsk } from "@/components/PromptProvider";
+
 import { useEffect, useMemo, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { editorExtensions } from "./editorExtensions";
@@ -204,14 +206,26 @@ function Toolbar({
   mode: Mode;
   onMode: (next: Mode) => void;
 }) {
+  const ask = useAsk();
   const btn = (active: boolean) =>
     `rounded px-2 py-1 text-xs transition ${
       active ? "bg-slate-900 text-white" : "hover:bg-slate-200"
     }`;
 
-  function addLink() {
+  async function addLink() {
     const previous = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("Link URL", previous ?? "https://");
+    const url = await ask({
+      title: previous ? "Edit link" : "Add link",
+      label: "Link URL",
+      defaultValue: previous ?? "https://",
+      // The clearing behaviour was undiscoverable with a browser prompt and is
+      // worth saying, since it is the only way to remove a link.
+      hint: "Clear the field and confirm to remove the link.",
+      confirmLabel: previous ? "Update link" : "Add link",
+    });
+
+    // Null is cancel; empty is a deliberate removal. The same distinction
+    // window.prompt made, and the reason ask resolves to null rather than "".
     if (url === null) return;
     if (url === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
@@ -220,8 +234,15 @@ function Toolbar({
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
-  function addImage() {
-    const url = window.prompt("Image URL");
+  async function addImage() {
+    const url = await ask({
+      title: "Insert image",
+      label: "Image URL",
+      placeholder: "https://example.com/photo.jpg",
+      hint: "The image is linked, not uploaded, so it has to stay online where it is.",
+      confirmLabel: "Insert",
+      required: true,
+    });
     if (url) editor.chain().focus().setImage({ src: url }).run();
   }
 

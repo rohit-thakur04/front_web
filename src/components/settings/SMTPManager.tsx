@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAsk } from "@/components/PromptProvider";
 import type { SMTPConnection } from "@/lib/types";
 
 // The Custom SMTP detail view: list of a tenant's SMTP connections with add,
 // edit, test, set-default, and delete. Reached from the App Store card.
 export function SMTPManager({ onBack }: { onBack: () => void }) {
+  const ask = useAsk();
   const [conns, setConns] = useState<SMTPConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,10 +52,15 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
   }
 
   async function test(conn: SMTPConnection) {
-    const to = window.prompt(
-      `Send a test email through "${conn.displayName}" to which address?`,
-      conn.fromEmail,
-    );
+    const to = await ask({
+      title: "Send a test email",
+      label: "Send it to",
+      defaultValue: conn.fromEmail,
+      type: "email",
+      hint: `Sent through "${conn.displayName}". Nothing else is changed.`,
+      confirmLabel: "Send test",
+      required: true,
+    });
     if (to === null) return;
     setNotice("");
     setError("");
