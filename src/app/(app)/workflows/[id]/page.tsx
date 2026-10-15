@@ -7,7 +7,10 @@ import { ApiError, api } from "@/lib/api";
 import type {
   CatalogItem,
   EmailTemplate,
+  Form,
+  Pipeline,
   PublishProblem,
+  Stage,
   WabaTemplate,
   Workflow,
   WorkflowActivity,
@@ -53,6 +56,16 @@ export default function WorkflowBuilderPage() {
   // Config panel selection: the trigger, or a step by id.
   const [selected, setSelected] = useState<{ kind: "trigger" | "step"; id?: string } | null>(null);
   const [showActivity, setShowActivity] = useState(false);
+  /*
+   * What the trigger and the actions need to offer a choice.
+   *
+   * A workflow is built out of this account's own forms, pipelines and stages,
+   * and without them the builder can only offer free-text ids — which is what
+   * made it feel like a developer tool rather than a product.
+   */
+  const [forms, setForms] = useState<Form[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
 
   useEffect(() => {
     async function run() {
@@ -69,6 +82,31 @@ export default function WorkflowBuilderPage() {
           setTemplates(await api<EmailTemplate[]>("/templates"));
         } catch {
           setTemplates([]);
+        }
+        /*
+         * Each in its own try: a plan without forms must not stop somebody
+         * configuring a stage move, and the builder has to open even when one
+         * of these is unavailable.
+         */
+        try {
+          setForms(await api<Form[]>("/forms"));
+        } catch {
+          setForms([]);
+        }
+        try {
+          const list = await api<Pipeline[]>("/pipelines");
+          setPipelines(list);
+          // Every stage across every pipeline, so the Move to Stage picker can
+          // group them without a request per pipeline as the user browses.
+          const all = await Promise.all(
+            list.map((pl) =>
+              api<Stage[]>(`/pipelines/${pl._id}/stages`).catch(() => [] as Stage[]),
+            ),
+          );
+          setStages(all.flat());
+        } catch {
+          setPipelines([]);
+          setStages([]);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not load workflow");
@@ -364,6 +402,11 @@ export default function WorkflowBuilderPage() {
             {selected.kind === "trigger" && triggerItem ? (
               <TriggerConfig
                 item={triggerItem}
+                config={wf.triggerConfig ?? {}}
+                forms={forms}
+                onConfig={(next) =>
+                  patch({ triggerConfig: { ...(wf.triggerConfig ?? {}), ...next } })
+                }
                 onChangeTrigger={() => setPicker({ mode: "trigger" })}
                 onRemove={clearTrigger}
                 onClose={() => setSelected(null)}
@@ -373,6 +416,8 @@ export default function WorkflowBuilderPage() {
                 step={selectedStep}
                 item={itemByKey[selectedStep.type]}
                 templates={templates}
+                pipelines={pipelines}
+                stages={stages}
                 onChange={(p) => editStep(selectedStep.id, p)}
                 onClose={() => setSelected(null)}
               />
@@ -615,17 +660,34 @@ function AddButton({ onClick }: { onClick: () => void }) {
 
 // --- Config panels --------------------------------------------------------
 
+/*
+The triggers the engine actually enrols on.
+
+Kept beside the builder rather than inferred from the catalog, because the
+catalog lists every trigger the product intends to have and the engine
+implements two. A builder that presents twenty-five entry points and silently
+runs two is the single most misleading thing in this screen.
+*/
+const TRIGGERS_THAT_FIRE = ["contact_created", "form_submitted"];
+
 function TriggerConfig({
   item,
+  config,
+  forms,
+  onConfig,
   onChangeTrigger,
   onRemove,
   onClose,
 }: {
   item: CatalogItem;
+  config: Record<string, unknown>;
+  forms: Form[];
+  onConfig: (patch: Record<string, unknown>) => void;
   onChangeTrigger: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const formId = typeof config.formId === "string" ? config.formId : "";
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -638,10 +700,50 @@ function TriggerConfig({
         </button>
       </div>
       <p className="mb-3 text-sm text-slate-500">{item.description}</p>
-      <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-        This is the entry point of the workflow. Trigger-specific filters will be configurable when
-        live execution is wired.
-      </p>
+
+      {/* Which form. The whole reason somebody picks this trigger rather than
+          Contact Created is that they want follow-up for one particular form. */}
+      {item.key === "form_submitted" && (
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium">Which form?</label>
+          <select
+            className="input"
+            value={formId}
+            onChange={(e) => onConfig({ formId: e.target.value })}
+          >
+            <option value="">Any form</option>
+            {forms.map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.name}
+                {f.status !== "published" ? " (draft)" : ""}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-slate-500">
+            {formId
+              ? "Runs only for this form. Other forms do not start this workflow."
+              : "Runs for every form in this account."}
+          </p>
+          {/* A draft form accepts nothing, so a workflow pointed at one will
+              never run. Said here rather than left to be discovered. */}
+          {formId && forms.find((f) => f._id === formId)?.status !== "published" && (
+            <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+              That form is a draft, so nobody can submit it yet and this workflow
+              will not run until it is published.
+            </p>
+          )}
+        </div>
+      )}
+
+      {!TRIGGERS_THAT_FIRE.includes(item.key) && (
+        /* Honest rather than encouraging. A trigger that cannot fire produces a
+           workflow somebody builds, publishes, and waits on. */
+        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This trigger is listed but does not fire yet, so a workflow built on it
+          will not run. Contact Created and Form Submitted are the two that work
+          today.
+        </p>
+      )}
 
       <div className="flex gap-2">
         <button
@@ -674,12 +776,16 @@ function StepConfig({
   step,
   item,
   templates,
+  pipelines,
+  stages,
   onChange,
   onClose,
 }: {
   step: WorkflowStep;
   item?: CatalogItem;
   templates: EmailTemplate[];
+  pipelines: Pipeline[];
+  stages: Stage[];
   onChange: (patch: Partial<WorkflowStep>) => void;
   onClose: () => void;
 }) {
@@ -722,6 +828,58 @@ function StepConfig({
       />
 
       <div className="space-y-3">
+        {step.type === "move_stage" && (
+          <>
+            <Field label="Move the contact to">
+              <select
+                className="input"
+                value={str("stageId")}
+                onChange={(e) => {
+                  const stage = stages.find((x) => x._id === e.target.value);
+                  // The pipeline is stored alongside so the summary can name it
+                  // without a lookup, and so a stage deleted later still leaves
+                  // a readable record of what the step meant.
+                  setMany({
+                    stageId: e.target.value,
+                    stageName: stage?.name ?? "",
+                    pipelineId: stage?.pipelineId ?? "",
+                  });
+                }}
+              >
+                <option value="">Select a stage…</option>
+                {/* Grouped by pipeline, because stage names repeat across them
+                    — two pipelines both having "New" is normal, and a flat list
+                    of them is unusable. */}
+                {pipelines.map((pl) => (
+                  <optgroup key={pl._id} label={pl.name}>
+                    {stages
+                      .filter((st) => st.pipelineId === pl._id)
+                      .map((st) => (
+                        <option key={st._id} value={st._id}>
+                          {st.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {/* The consequence nobody expects, and the one that sends email.
+                  Said here because it is the difference between this step being
+                  a filing action and a sending one. */}
+              Moving a contact stops the follow-up of the stage it leaves and
+              starts the follow-up of the stage it enters — including that
+              stage&apos;s Day 1 email, if it has one.
+            </p>
+            {stages.length === 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This account has no pipeline stages yet. Create a pipeline on the
+                Board first.
+              </p>
+            )}
+          </>
+        )}
+
         {step.type === "send_email" && (
           <>
             {/* Use an existing template, or write custom content. */}
