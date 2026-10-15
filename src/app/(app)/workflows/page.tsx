@@ -4,33 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { RecipePicker } from "@/components/workflow/RecipePicker";
+import { materialise, type WorkflowRecipe } from "@/lib/workflowRecipes";
 import { RowAction, RowActions } from "@/components/RowActions";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import type { CatalogItem, Workflow, WorkflowCatalog } from "@/lib/types";
 
-/**
- * Suggested names for a first workflow.
- *
- * Deliberately only what the engine can actually do today — a contact arriving,
- * then an email or a WhatsApp message. Suggesting a workflow the builder cannot
- * finish would be a promise the product does not keep.
- */
-const STARTERS: { name: string; hint: string }[] = [
-  {
-    name: "Welcome email for new leads",
-    hint: "When a contact is created, send them an introduction.",
-  },
-  {
-    name: "WhatsApp greeting on new contact",
-    hint: "Reach a new lead on the channel they are most likely to read.",
-  },
-  {
-    name: "Follow up two days later",
-    hint: "Wait, then check in if nothing has happened yet.",
-  },
-];
 
 export default function WorkflowsPage() {
   const { hasFeature, workflowLimit } = useAuth();
@@ -81,13 +62,33 @@ export default function WorkflowsPage() {
     run();
   }, []);
 
-  async function create(name: string) {
+  /*
+   * Creates a workflow, optionally pre-built from a recipe.
+   *
+   * The create endpoint already accepted a trigger and steps, so a recipe is
+   * one request rather than a create followed by a save — which matters
+   * because a half-applied recipe would leave somebody in a builder holding
+   * part of what they asked for.
+   */
+  // Shown instead of a blank canvas. See RecipePicker for why.
+  const [picking, setPicking] = useState(false);
+
+  async function create(name: string, recipe?: WorkflowRecipe) {
     setCreating(true);
     setError("");
     try {
       const wf = await api<Workflow>("/workflows", {
         method: "POST",
-        body: { name: name.trim() },
+        body: {
+          name: name.trim(),
+          ...(recipe
+            ? {
+                trigger: recipe.trigger,
+                triggerConfig: recipe.triggerConfig ?? {},
+                steps: materialise(recipe),
+              }
+            : {}),
+        },
       });
       router.push(`/workflows/${wf._id}`);
     } catch (e) {
@@ -165,7 +166,7 @@ export default function WorkflowsPage() {
               </span>
             )}
             <button
-              onClick={() => setNewName("")}
+              onClick={() => setPicking(true)}
               disabled={creating || atLimit}
               title={atLimit ? "Workflow limit reached" : undefined}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
@@ -226,36 +227,13 @@ export default function WorkflowsPage() {
             then runs the steps you lay out.
           </p>
           <button
-            onClick={() => setNewName("")}
+            onClick={() => setPicking(true)}
             disabled={creating || atLimit}
             className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {creating ? "Creating…" : "+ Create Workflow"}
           </button>
 
-          {/* Suggestions, not templates. Each one creates the workflow already
-              named and opens the builder — it does not pre-build steps, because
-              a workflow that appears to be finished and quietly does nothing is
-              worse than an empty one. The name is the useful part: it is the
-              thing people leave as "Untitled Workflow". */}
-          <div className="mx-auto mt-6 max-w-md border-t border-slate-200 pt-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-              Or start from a common one
-            </p>
-            <div className="flex flex-col gap-1.5">
-              {STARTERS.map((st) => (
-                <button
-                  key={st.name}
-                  onClick={() => create(st.name)}
-                  disabled={creating || atLimit}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50"
-                >
-                  <span className="font-medium">{st.name}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{st.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -320,6 +298,21 @@ export default function WorkflowsPage() {
           </table>
         </div>
       )}
+      {picking && (
+        <RecipePicker
+          busy={creating}
+          onPick={(recipe) => {
+            setPicking(false);
+            void create(recipe.name, recipe);
+          }}
+          onBlank={() => {
+            setPicking(false);
+            setNewName("");
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
+
       {newName !== null && (
         <NameDialog
           value={newName}
