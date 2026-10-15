@@ -20,6 +20,8 @@ import type {
   FormField,
   FormStyles,
   FormTheme,
+  Pipeline,
+  Stage,
 } from "@/lib/types";
 
 function genId(): string {
@@ -56,6 +58,17 @@ function effective(styles: FormStyles) {
 }
 
 export default function FormBuilderPage() {
+  /*
+   * Where submissions go.
+   *
+   * The Form model has carried a destination all along and resolveTargetStage
+   * reads it, but nothing could write one — so every form delivered to the
+   * first pipeline's first stage with no way to choose, which is exactly the
+   * "I cannot get these contacts into my pipeline" problem.
+   */
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+
   const { id } = useParams<{ id: string }>();
 
   const [form, setForm] = useState<Form | null>(null);
@@ -70,6 +83,27 @@ export default function FormBuilderPage() {
   const [preview, setPreview] = useState(false);
   const [share, setShare] = useState(false);
   const [rightTab, setRightTab] = useState<"customize" | "themes">("customize");
+
+  useEffect(() => {
+    async function loadDestinations() {
+      try {
+        const list = await api<Pipeline[]>("/pipelines");
+        setPipelines(list);
+        const all = await Promise.all(
+          list.map((pl) =>
+            api<Stage[]>(`/pipelines/${pl._id}/stages`).catch(() => [] as Stage[]),
+          ),
+        );
+        setStages(all.flat());
+      } catch {
+        // A plan without pipelines still has a usable form builder; the picker
+        // simply says there is nowhere to deliver to yet.
+        setPipelines([]);
+        setStages([]);
+      }
+    }
+    void loadDestinations();
+  }, []);
 
   useEffect(() => {
     async function run() {
@@ -173,6 +207,8 @@ export default function FormBuilderPage() {
           styles: form.styles,
           theme: form.theme,
           layout: form.layout ?? "classic",
+          // Only the stage; the server derives the pipeline from it.
+          stageId: form.stageId ?? "",
         },
       });
       setForm(saved);
@@ -377,11 +413,15 @@ export default function FormBuilderPage() {
                 themes={catalog.themes}
                 activeTheme={form.theme}
                 layout={form.layout ?? "classic"}
+                stageId={form.stageId ?? ""}
+                pipelines={pipelines}
+                stages={stages}
                 tab={rightTab}
                 onTab={setRightTab}
                 onChange={(styles) => patch({ styles })}
                 onTheme={applyTheme}
                 onLayout={(layout) => patch({ layout })}
+                onStage={(stageId) => patch({ stageId: stageId || null })}
               />
             )}
           </div>
@@ -740,27 +780,77 @@ function StylePanel({
   themes,
   activeTheme,
   layout,
+  stageId,
+  pipelines,
+  stages,
   tab,
   onTab,
   onChange,
   onTheme,
   onLayout,
+  onStage,
 }: {
   styles: FormStyles;
   themes: FormTheme[];
   activeTheme: string;
   layout: "classic" | "stepped";
+  stageId: string;
+  pipelines: Pipeline[];
+  stages: Stage[];
   tab: "customize" | "themes";
   onTab: (t: "customize" | "themes") => void;
   onChange: (styles: FormStyles) => void;
   onTheme: (t: FormTheme) => void;
   onLayout: (l: "classic" | "stepped") => void;
+  onStage: (stageId: string) => void;
 }) {
   const set = (p: Partial<FormStyles>) => onChange({ ...styles, ...p });
 
   return (
     <div>
       <h3 className="mb-3 font-semibold">Styles &amp; Options</h3>
+
+      {/*
+        Where submissions go.
+
+        First, because it is the only setting that decides whether a lead
+        reaches the business at all. A form with the wrong destination still
+        looks perfect and still says thank you.
+      */}
+      <div className="mb-4">
+        <p className="mb-1.5 text-sm font-medium">Send submissions to</p>
+        <select
+          value={stageId}
+          onChange={(e) => onStage(e.target.value)}
+          className="input"
+        >
+          <option value="">First pipeline, first stage</option>
+          {pipelines.map((pl) => (
+            <optgroup key={pl._id} label={pl.name}>
+              {stages
+                .filter((st) => st.pipelineId === pl._id)
+                .map((st) => (
+                  <option key={st._id} value={st._id}>
+                    {st.name}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-slate-500">
+          {stageId
+            ? "Every submission becomes a contact in this stage, and starts that stage's follow-up."
+            : "Submissions land in whichever pipeline you made first. Choose a stage to be sure."}
+        </p>
+        {pipelines.length === 0 && (
+          <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+            {/* The case where submissions are stored and no contact is created
+                at all — which otherwise only appears in a server log. */}
+            This account has no pipeline yet, so submissions are saved but no
+            contact is created. Create a pipeline on the Board first.
+          </p>
+        )}
+      </div>
 
       {/* Layout sits above the style tabs because it is not styling: it
           changes how the form is answered, not how it looks. */}

@@ -229,6 +229,15 @@ export interface Form {
    * identical either way, so this is switchable after the form is shared.
    */
   layout?: "classic" | "stepped";
+  /**
+   * Where a submission lands.
+   *
+   * Absent means the fallback: the account's first pipeline and its first
+   * stage. The pipeline is derived from the stage server-side, so only the
+   * stage needs sending.
+   */
+  pipelineId?: string | null;
+  stageId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
