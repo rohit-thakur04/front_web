@@ -329,6 +329,13 @@ export interface IntegrationProvider {
   description: string;
   icon: string;
   required: boolean;
+  /**
+   * Whether a connection of this provider can be proved by sending through it.
+   *
+   * Set by the catalog rather than inferred from the key, so the App Store does
+   * not need a list of which providers happen to support a test.
+   */
+  testable?: boolean;
   fields: IntegrationField[];
 }
 

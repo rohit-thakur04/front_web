@@ -33,6 +33,15 @@ export function AppStore() {
   const [smtpOpen, setSmtpOpen] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  /*
+   * Which card is mid-test, and what each test said.
+   *
+   * Kept per provider rather than as one shared message, so testing a second
+   * connection does not wipe the result of the first — the comparison between
+   * two providers is exactly what somebody is doing when one of them refuses.
+   */
+  const [testing, setTesting] = useState("");
+  const [tested, setTested] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   async function load() {
     try {
@@ -69,6 +78,35 @@ export function AppStore() {
     for (const c of connections) m[c.provider] = c;
     return m;
   }, [connections]);
+
+  /*
+   * Sends a real email through a stored connection.
+   *
+   * The result stays on the card instead of going to the page-level error line,
+   * because the useful failures name the provider that produced them — an
+   * unverified domain is a fact about one connection, not about the page.
+   */
+  async function sendTest(provider: IntegrationProvider) {
+    setTesting(provider.key);
+    setTested((t) => ({ ...t, [provider.key]: { ok: false, message: "" } }));
+    try {
+      const res = await api<{ message: string }>(`/integrations/${provider.key}/test`, {
+        method: "POST",
+        body: {},
+      });
+      setTested((t) => ({ ...t, [provider.key]: { ok: true, message: res.message } }));
+    } catch (e) {
+      setTested((t) => ({
+        ...t,
+        [provider.key]: {
+          ok: false,
+          message: e instanceof Error ? e.message : "Test send failed",
+        },
+      }));
+    } finally {
+      setTesting("");
+    }
+  }
 
   async function disconnect(provider: IntegrationProvider) {
     if (!window.confirm(`Disconnect ${provider.name}? Stored credentials are removed.`)) return;
@@ -107,8 +145,9 @@ export function AppStore() {
   return (
     <div>
       <p className="mb-4 text-sm text-slate-500">
-        {connectedCount} connected. Connecting stores your API keys encrypted; it doesn&apos;t
-        verify them against the provider yet.
+        {connectedCount} connected. Connecting stores your API keys encrypted. It
+        doesn&apos;t check them against the provider — use <b>Send test</b> on an
+        email connection to prove one actually sends.
       </p>
 
       {brokenCount > 0 && (
@@ -185,6 +224,22 @@ export function AppStore() {
                       </p>
                     )}
 
+                    {/* What the last test said. The provider's own sentence,
+                        which is the difference between a client fixing their
+                        domain verification and a client giving up. */}
+                    {tested[p.key]?.message && (
+                      <p
+                        className={`mt-2 rounded-lg px-2.5 py-2 text-xs ${
+                          tested[p.key].ok
+                            ? "bg-emerald-50 text-emerald-800"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        {tested[p.key].ok ? "✓ " : ""}
+                        {tested[p.key].message}
+                      </p>
+                    )}
+
                     {isSmtp && smtpConns.length > 0 && (
                       <p className="mt-2 text-xs text-slate-400">
                         {smtpConns.length} connection{smtpConns.length === 1 ? "" : "s"}
@@ -192,7 +247,7 @@ export function AppStore() {
                       </p>
                     )}
 
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                       <span
                         className={`inline-flex items-center gap-1 text-xs font-medium ${
                           broken
@@ -232,7 +287,20 @@ export function AppStore() {
                           {connected ? "Manage" : "Set up"}
                         </button>
                       ) : connected ? (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {/* Offered even when the saved keys cannot be read:
+                              the test is how somebody confirms that reconnecting
+                              worked, so hiding it there removes it exactly when
+                              it is wanted. */}
+                          {p.testable && (
+                            <button
+                              onClick={() => sendTest(p)}
+                              disabled={testing === p.key}
+                              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {testing === p.key ? "Sending…" : "Send test"}
+                            </button>
+                          )}
                           <button
                             onClick={() => (p.key === WHATSAPP ? setWabaSetup(p) : setConnecting(p))}
                             className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50"
