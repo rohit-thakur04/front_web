@@ -71,6 +71,15 @@ export interface MeResponse {
   // How many workflows this tenant may create. 0 means unlimited. Resolved
   // server-side, so a staff account receives its client's allowance.
   workflowLimit: number;
+  /**
+   * Whether this server only simulates sends.
+   *
+   * Nothing to do with the account — it is how the server was started. Returned
+   * so the app can say so, because a simulated send is otherwise invisible from
+   * inside the product and looks exactly like a working one.
+   */
+  emailDryRun?: boolean;
+  wabaDryRun?: boolean;
 }
 
 // --- Workflows (automation builder) --------------------------------------

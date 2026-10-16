@@ -27,6 +27,16 @@ interface AuthState {
   // How many workflows this tenant may create; 0 means unlimited. Set per client
   // by an admin, and resolved server-side so staff get their client's allowance.
   workflowLimit: number;
+  /*
+   * Whether this server is only simulating sends.
+   *
+   * A server setting rather than anything about the account, surfaced here
+   * because it is the one thing that can make a perfectly configured mailbox
+   * send nothing while every log says "Sent". Until this was exposed, the only
+   * sign of it was a line in a startup log no client ever sees.
+   */
+  emailDryRun: boolean;
+  wabaDryRun: boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -35,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean> | null>(null);
   const [workflowLimit, setWorkflowLimit] = useState(0);
+  const [dryRun, setDryRun] = useState({ email: false, waba: false });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -54,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(me.user);
           setFeatures(me.features);
           setWorkflowLimit(me.workflowLimit ?? 0);
+          setDryRun({ email: me.emailDryRun ?? false, waba: me.wabaDryRun ?? false });
         }
       } catch {
         clearToken();
@@ -81,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const me = await api<MeResponse>("/auth/me");
         setFeatures(me.features);
         setWorkflowLimit(me.workflowLimit ?? 0);
+        setDryRun({ email: me.emailDryRun ?? false, waba: me.wabaDryRun ?? false });
       } catch {
         setFeatures(null);
       }
@@ -148,10 +161,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       isAdmin: user?.role === "admin",
       features,
+      emailDryRun: dryRun.email,
+      wabaDryRun: dryRun.waba,
       hasFeature,
       workflowLimit,
     }),
-    [user, loading, login, logout, features, hasFeature, workflowLimit],
+    [user, loading, login, logout, features, hasFeature, workflowLimit, dryRun],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

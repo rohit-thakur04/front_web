@@ -24,7 +24,7 @@ export function AppStore() {
    * not include this feature" — which reads as their Meta details being wrong,
    * sending them back to Meta to fix something that was never broken.
    */
-  const { hasFeature } = useAuth();
+  const { hasFeature, emailDryRun, wabaDryRun } = useAuth();
   const [catalog, setCatalog] = useState<IntegrationGroup[]>([]);
   const [connections, setConnections] = useState<Integration[]>([]);
   const [smtpConns, setSmtpConns] = useState<SMTPConnection[]>([]);
@@ -149,6 +149,34 @@ export function AppStore() {
         doesn&apos;t check them against the provider — use <b>Send test</b> on an
         email connection to prove one actually sends.
       </p>
+
+      {/*
+        The one thing that makes a perfect setup send nothing.
+
+        This is a server setting, not an account one, and it used to be visible
+        only in a startup log. Somebody could connect SMTP, watch the activity
+        feed say "Sent to …", and go looking for a fault in email settings that
+        were fine — the message was never attempted. Said here, on the page
+        where people come to fix email.
+      */}
+      {(emailDryRun || wabaDryRun) && (
+        <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>Nothing is actually being sent.</b> This server is running in test
+          mode
+          {emailDryRun && wabaDryRun
+            ? " for email and WhatsApp"
+            : emailDryRun
+              ? " for email"
+              : " for WhatsApp"}
+          , so messages are written to the server log instead of delivered — even
+          when your connection below is set up correctly. Set{" "}
+          <code className="rounded bg-amber-100 px-1">
+            {emailDryRun ? "EMAIL_DRY_RUN" : "WABA_DRY_RUN"}
+          </code>{" "}
+          to <code className="rounded bg-amber-100 px-1">false</code> where this
+          app is hosted, then restart it.
+        </p>
+      )}
 
       {brokenCount > 0 && (
         <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
