@@ -48,6 +48,31 @@ export function CardDialog({
   const [saving, setSaving] = useState(false);
 
   /*
+   * Tags and Do Not Disturb.
+   *
+   * Both exist because workflows need them, and both have to be editable by
+   * hand or they are only ever as good as the automation that sets them. Tags
+   * are what a condition in a workflow can ask about — the way a client says
+   * "this kind of lead" in their own words — and Do Not Disturb is how somebody
+   * records a request to be left alone, which has to be possible the moment a
+   * customer says it on the phone.
+   */
+  const [tags, setTags] = useState<string[]>(card?.tags ?? []);
+  const [tagDraft, setTagDraft] = useState("");
+  const [dnd, setDnd] = useState(card?.dnd ?? false);
+
+  function addTag(raw: string) {
+    const tag = raw.trim();
+    if (!tag) return;
+    // Case-insensitive, matching the server: "VIP" and "vip" are one tag to the
+    // person typing them, and a list showing both would look like a bug.
+    if (!tags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
+      setTags([...tags, tag]);
+    }
+    setTagDraft("");
+  }
+
+  /*
    * Creating a contact normally starts the stage's follow-up sequence and fires
    * the Contact Created workflow trigger, which means an email goes out at once.
    *
@@ -131,11 +156,27 @@ export function CardDialog({
     if (!name.trim() || needsStage) return;
 
     setSaving(true);
+    /*
+     * A tag left in the input counts.
+     *
+     * Somebody types "vip", presses Save, and loses it because they never
+     * pressed Enter — a data-loss bug that feels like the product ignoring
+     * them. Folded in here rather than fixed with a blur handler, which would
+     * still miss the Enter-less path when the form is submitted by keyboard.
+     */
+    const pending = tagDraft.trim();
+    const finalTags =
+      pending && !tags.some((t) => t.toLowerCase() === pending.toLowerCase())
+        ? [...tags, pending]
+        : tags;
+
     const body = {
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
       value: Number(value) || 0,
+      tags: finalTags,
+      dnd,
     };
 
     try {
@@ -257,6 +298,82 @@ export function CardDialog({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium" htmlFor="card-tags">
+            Tags
+          </label>
+          {tags.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs text-slate-700"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => setTags(tags.filter((t) => t !== tag))}
+                    aria-label={`Remove tag ${tag}`}
+                    className="rounded-full px-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            id="card-tags"
+            value={tagDraft}
+            placeholder="Type a tag and press Enter"
+            onChange={(e) => setTagDraft(e.target.value)}
+            onKeyDown={(e) => {
+              /*
+               * Enter adds the tag and must not submit the form — inside a
+               * form, Enter in a text input submits by default, so without
+               * preventDefault the first tag anybody types also saves and
+               * closes the dialog.
+               */
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addTag(tagDraft);
+              }
+              // Backspace on an empty box removes the last tag, which is what
+              // every tag input anyone has used does.
+              if (e.key === "Backspace" && tagDraft === "" && tags.length > 0) {
+                setTags(tags.slice(0, -1));
+              }
+            }}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Workflows can watch for a tag being added, and ask about one before
+            deciding what to do next.
+          </p>
+        </div>
+
+        {/* Only when editing. Nobody adds a contact in order to immediately
+            stop messaging them, and the checkbox on the Add form would just be
+            one more thing to read past. */}
+        {card && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-2.5">
+            <input
+              type="checkbox"
+              checked={dnd}
+              onChange={(e) => setDnd(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-sm">
+              <span className="font-medium">Do Not Disturb</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                Stops every automated email and WhatsApp message to this contact,
+                from every workflow and stage sequence. You can still message them
+                yourself.
+              </span>
+            </span>
+          </label>
+        )}
 
         {/* A contact cannot exist outside a stage, so a page that spans every
             pipeline has to ask which one before it can create anything. */}

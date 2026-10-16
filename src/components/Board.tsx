@@ -174,6 +174,42 @@ export function Board({
     }
   }
 
+  /*
+   * Marking a column as the end of the road.
+   *
+   * This is what makes Deal Won and Deal Lost possible as workflow triggers. It
+   * has to be a setting rather than read from the column's name, because a
+   * column called "Closed" is a label somebody renames on a Tuesday, and a
+   * workflow built on a name would quietly stop working when they did.
+   *
+   * It lives on the board rather than in Settings because this is where
+   * somebody is looking at their columns and thinking about what they mean.
+   */
+  async function setOutcomeFor(stage: Stage) {
+    const choice = await ask({
+      title: `What does "${stage.name}" mean?`,
+      hint: "Workflows can react to a deal being won or lost. This is how they know which columns count.",
+      confirmLabel: "Save",
+      options: [
+        { value: "", label: "An ordinary stage" },
+        { value: "won", label: "Won — the deal was closed successfully" },
+        { value: "lost", label: "Lost — the deal did not happen" },
+      ],
+      defaultValue: stage.kind ?? "",
+    });
+    // Null is cancelled; an empty string is a real answer here, which is why
+    // this is not a truthiness check and why `required` is not set above.
+    if (choice === null) return;
+    if (choice === (stage.kind ?? "")) return;
+
+    try {
+      await api(`/stages/${stage._id}`, { method: "PUT", body: { kind: choice } });
+      await reload();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not save the outcome");
+    }
+  }
+
   async function deleteStage(stage: Stage) {
     if (
       !window.confirm(`Delete "${stage.name}"? Its cards will be deleted too.`)
@@ -231,9 +267,28 @@ export function Board({
                         className="flex items-center gap-2 rounded-t-xl px-3 py-2"
                         style={{ borderTop: `3px solid ${stage.color}` }}
                       >
-                        <span className="flex-1 text-sm font-semibold">
+                        <span className="flex-1 truncate text-sm font-semibold">
                           {stage.name}
                         </span>
+                        {/* The outcome marking, when there is one. Small, but
+                            it is the only visible sign of the thing the Deal
+                            Won and Deal Lost triggers read. */}
+                        {(stage.kind === "won" || stage.kind === "lost") && (
+                          <span
+                            title={
+                              stage.kind === "won"
+                                ? "Reaching this column counts as winning the deal"
+                                : "Reaching this column counts as losing the deal"
+                            }
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                              stage.kind === "won"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-rose-100 text-rose-700"
+                            }`}
+                          >
+                            {stage.kind}
+                          </span>
+                        )}
                         <span
                           className="rounded bg-white px-1.5 py-0.5 text-xs text-slate-500"
                           title={filtering ? "Matching cards in this stage" : undefined}
@@ -242,6 +297,13 @@ export function Board({
                             ? `${shown.length} of ${stage.cards?.length ?? 0}`
                             : (stage.cards?.length ?? 0)}
                         </span>
+                        <button
+                          onClick={() => setOutcomeFor(stage)}
+                          title="Mark this column as Won or Lost"
+                          className="text-slate-400 hover:text-slate-700"
+                        >
+                          ⚙
+                        </button>
                         <button
                           onClick={() => deleteStage(stage)}
                           title="Delete column"

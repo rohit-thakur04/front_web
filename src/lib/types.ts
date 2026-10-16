@@ -99,6 +99,14 @@ export interface Workflow {
   // Derived server-side for the list view; absent on a workflow that never ran.
   lastRunAt?: string | null;
   runCount?: number;
+  /**
+   * The inbound address for a webhook-triggered workflow.
+   *
+   * Derived server-side from the workflow id and the app secret, and only sent
+   * for the trigger that uses one — it is a credential, so it is not handed out
+   * on workflows that have no use for it.
+   */
+  webhookUrl?: string;
 }
 
 // One reason a workflow cannot be published yet, as the server reports it.
@@ -483,6 +491,12 @@ export interface Card {
   email: string;
   value: number;
   position: number;
+  /** Free-form labels. The thing workflow conditions ask about. */
+  tags?: string[];
+  /** Do Not Disturb: automation will not message this contact. */
+  dnd?: boolean;
+  /** The staff member responsible, if anyone. */
+  assignedTo?: string | null;
   stageId: string;
   pipelineId: string;
   ownerId: string;
@@ -495,6 +509,14 @@ export interface Stage {
   name: string;
   position: number;
   color: string;
+  /**
+   * Marks this column as the end of the road.
+   *
+   * What makes the Deal Won and Deal Lost triggers possible: a column named
+   * "Closed" is a label somebody can rename, this is a fact a workflow can be
+   * built on.
+   */
+  kind?: "" | "won" | "lost";
   pipelineId: string;
   ownerId: string;
   cards?: Card[];

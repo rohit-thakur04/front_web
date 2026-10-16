@@ -11,6 +11,7 @@ import type {
   Pipeline,
   PublishProblem,
   Stage,
+  User,
   WabaTemplate,
   Workflow,
   WorkflowActivity,
@@ -66,6 +67,15 @@ export default function WorkflowBuilderPage() {
   const [forms, setForms] = useState<Form[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
+  /*
+   * The team, for the Assign and Notify steps.
+   *
+   * /staff is client-only, so a staff member building a workflow gets a 403
+   * here. That is correct — they cannot manage the team — and it must not stop
+   * them editing anything else, so the list simply comes back empty and those
+   * two steps say why.
+   */
+  const [staff, setStaff] = useState<User[]>([]);
 
   useEffect(() => {
     async function run() {
@@ -92,6 +102,11 @@ export default function WorkflowBuilderPage() {
           setForms(await api<Form[]>("/forms"));
         } catch {
           setForms([]);
+        }
+        try {
+          setStaff(await api<User[]>("/staff"));
+        } catch {
+          setStaff([]);
         }
         try {
           const list = await api<Pipeline[]>("/pipelines");
@@ -404,6 +419,10 @@ export default function WorkflowBuilderPage() {
                 item={triggerItem}
                 config={wf.triggerConfig ?? {}}
                 forms={forms}
+                pipelines={pipelines}
+                stages={stages}
+                staff={staff}
+                webhookUrl={wf.webhookUrl}
                 onConfig={(next) =>
                   patch({ triggerConfig: { ...(wf.triggerConfig ?? {}), ...next } })
                 }
@@ -418,6 +437,7 @@ export default function WorkflowBuilderPage() {
                 templates={templates}
                 pipelines={pipelines}
                 stages={stages}
+                staff={staff}
                 onChange={(p) => editStep(selectedStep.id, p)}
                 onClose={() => setSelected(null)}
               />
@@ -668,12 +688,14 @@ catalog lists every trigger the product intends to have and the engine
 implements two. A builder that presents twenty-five entry points and silently
 runs two is the single most misleading thing in this screen.
 */
-const TRIGGERS_THAT_FIRE = ["contact_created", "form_submitted"];
-
 function TriggerConfig({
   item,
   config,
   forms,
+  pipelines,
+  stages,
+  staff,
+  webhookUrl,
   onConfig,
   onChangeTrigger,
   onRemove,
@@ -682,12 +704,17 @@ function TriggerConfig({
   item: CatalogItem;
   config: Record<string, unknown>;
   forms: Form[];
+  pipelines: Pipeline[];
+  stages: Stage[];
+  staff: User[];
+  webhookUrl?: string;
   onConfig: (patch: Record<string, unknown>) => void;
   onChangeTrigger: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const formId = typeof config.formId === "string" ? config.formId : "";
+  const str = (key: string) => (typeof config[key] === "string" ? (config[key] as string) : "");
+  const formId = str("formId");
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -735,14 +762,185 @@ function TriggerConfig({
         </div>
       )}
 
-      {!TRIGGERS_THAT_FIRE.includes(item.key) && (
-        /* Honest rather than encouraging. A trigger that cannot fire produces a
-           workflow somebody builds, publishes, and waits on. */
-        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This trigger is listed but does not fire yet, so a workflow built on it
-          will not run. Contact Created and Form Submitted are the two that work
-          today.
-        </p>
+      {/* Which move. Both left blank means any move between any two stages,
+          which is what somebody who skipped these options meant. */}
+      {item.key === "stage_changed" && (
+        <div className="mb-4 space-y-3">
+          <TriggerField label="From stage" hint="Leave blank to run whichever stage they came from.">
+            <StagePicker
+              value={str("fromStageId")}
+              pipelines={pipelines}
+              stages={stages}
+              anyLabel="Any stage"
+              onChange={(v) => onConfig({ fromStageId: v })}
+            />
+          </TriggerField>
+          <TriggerField label="To stage" hint="Leave blank to run whichever stage they moved into.">
+            <StagePicker
+              value={str("toStageId")}
+              pipelines={pipelines}
+              stages={stages}
+              anyLabel="Any stage"
+              onChange={(v) => onConfig({ toStageId: v })}
+            />
+          </TriggerField>
+        </div>
+      )}
+
+      {/* Won and Lost read the marking on a stage rather than its name, so the
+          builder has to say where that marking is set — and say plainly when
+          nothing carries it, because then this trigger can never run. */}
+      {(item.key === "deal_won" || item.key === "deal_lost") && (
+        <WonLostNote
+          kind={item.key === "deal_won" ? "won" : "lost"}
+          stages={stages}
+        />
+      )}
+
+      {item.key === "pipeline_changed" && (
+        <div className="mb-4">
+          <TriggerField label="Moved into which pipeline?" hint="Leave blank for any pipeline.">
+            <select
+              className="input"
+              value={str("toPipelineId")}
+              onChange={(e) => onConfig({ toPipelineId: e.target.value })}
+            >
+              <option value="">Any pipeline</option>
+              {pipelines.map((pl) => (
+                <option key={pl._id} value={pl._id}>
+                  {pl.name}
+                </option>
+              ))}
+            </select>
+          </TriggerField>
+        </div>
+      )}
+
+      {item.key === "deal_value_changed" && (
+        <div className="mb-4">
+          <TriggerField label="Which direction?">
+            <select
+              className="input"
+              value={str("direction") || "any"}
+              onChange={(e) => onConfig({ direction: e.target.value })}
+            >
+              <option value="any">Up or down</option>
+              <option value="increase">Only when it goes up</option>
+              <option value="decrease">Only when it goes down</option>
+            </select>
+          </TriggerField>
+        </div>
+      )}
+
+      {item.key === "contact_updated" && (
+        <div className="mb-4">
+          <TriggerField
+            label="Which field?"
+            hint="Leave blank to run whenever anything on the contact changes."
+          >
+            <select
+              className="input"
+              value={str("field")}
+              onChange={(e) => onConfig({ field: e.target.value })}
+            >
+              <option value="">Any field</option>
+              <option value="name">Name</option>
+              <option value="email">Email</option>
+              <option value="phone">Phone</option>
+              <option value="value">Deal value</option>
+              <option value="tags">Tags</option>
+              <option value="assignedTo">Assigned team member</option>
+              <option value="dnd">Do Not Disturb</option>
+            </select>
+          </TriggerField>
+        </div>
+      )}
+
+      {(item.key === "contact_tagged" || item.key === "contact_untagged") && (
+        <div className="mb-4">
+          <TriggerField label="Which tag?" hint="Leave blank to run for any tag.">
+            <input
+              className="input"
+              value={str("tag")}
+              placeholder="Any tag"
+              onChange={(e) => onConfig({ tag: e.target.value })}
+            />
+          </TriggerField>
+        </div>
+      )}
+
+      {item.key === "contact_assigned" && (
+        <div className="mb-4">
+          <TriggerField label="Assigned to whom?" hint="Leave blank for anyone on the team.">
+            <StaffPicker
+              value={str("userId")}
+              staff={staff}
+              anyLabel="Anyone"
+              onChange={(v) => onConfig({ userId: v })}
+            />
+          </TriggerField>
+        </div>
+      )}
+
+      {item.key === "dnd_changed" && (
+        <div className="mb-4">
+          <TriggerField label="Which change?">
+            <select
+              className="input"
+              value={str("state") || "any"}
+              onChange={(e) => onConfig({ state: e.target.value })}
+            >
+              <option value="any">Either way</option>
+              <option value="on">Only when they ask not to be contacted</option>
+              <option value="off">Only when they are contactable again</option>
+            </select>
+          </TriggerField>
+        </div>
+      )}
+
+      {item.key === "deal_stale" && (
+        <div className="mb-4 space-y-3">
+          <TriggerField label="Quiet for how many days?">
+            <input
+              className="input"
+              type="number"
+              min={1}
+              value={str("days") || "7"}
+              onChange={(e) => onConfig({ days: e.target.value })}
+            />
+          </TriggerField>
+          <TriggerField label="Only in one stage?" hint="Leave blank to watch the whole account.">
+            <StagePicker
+              value={str("stageId")}
+              pipelines={pipelines}
+              stages={stages}
+              anyLabel="Every stage"
+              onChange={(v) => onConfig({ stageId: v })}
+            />
+          </TriggerField>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Checked once a day at 9am. Each contact enters this workflow once — it
+            will not re-enrol them every morning.
+          </p>
+        </div>
+      )}
+
+      {item.key === "webhook_in" && (
+        <div className="mb-4 space-y-3">
+          <WebhookAddress url={webhookUrl} />
+          <TriggerField
+            label="Where should new contacts land?"
+            hint="Used only when a call is about somebody not already on file."
+          >
+            <StagePicker
+              value={str("stageId")}
+              pipelines={pipelines}
+              stages={stages}
+              anyLabel="First stage of the first pipeline"
+              onChange={(v) => onConfig({ stageId: v })}
+            />
+          </TriggerField>
+        </div>
       )}
 
       <div className="flex gap-2">
@@ -763,6 +961,191 @@ function TriggerConfig({
   );
 }
 
+/*
+A labelled control with the sentence that says what leaving it blank does.
+
+The hint is not decoration. Every filter in this builder treats "unset" as
+"any", and that is the opposite of what people assume about a dropdown they did
+not touch — without the line underneath, somebody picks Stage Changed, leaves
+both stage boxes alone, and expects nothing to happen.
+*/
+function TriggerField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      {children}
+      {hint && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+/*
+One stage picker, used by every trigger and step that needs one.
+
+Grouped by pipeline because stage names repeat across them — two pipelines both
+having a "New" column is normal, and a flat list of them is unusable.
+*/
+function StagePicker({
+  value,
+  pipelines,
+  stages,
+  anyLabel,
+  onChange,
+}: {
+  value: string;
+  pipelines: Pipeline[];
+  stages: Stage[];
+  anyLabel: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{anyLabel}</option>
+      {pipelines.map((pl) => (
+        <optgroup key={pl._id} label={pl.name}>
+          {stages
+            .filter((st) => st.pipelineId === pl._id)
+            .map((st) => (
+              <option key={st._id} value={st._id}>
+                {st.name}
+                {st.kind === "won" ? " (Won)" : st.kind === "lost" ? " (Lost)" : ""}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/*
+The team picker.
+
+Says why it is empty rather than showing a dropdown with nothing in it. There
+are two quite different reasons — a one-person account, and a staff member who
+is not allowed to read the team list — and neither is a bug to go looking for.
+*/
+function StaffPicker({
+  value,
+  staff,
+  anyLabel,
+  onChange,
+}: {
+  value: string;
+  staff: User[];
+  anyLabel: string;
+  onChange: (value: string) => void;
+}) {
+  if (staff.length === 0) {
+    return (
+      <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        No team members to choose from. Add them in Settings → Staff. If you are
+        signed in as staff yourself, only the account owner can see this list.
+      </p>
+    );
+  }
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{anyLabel}</option>
+      {staff.map((u) => (
+        <option key={u._id} value={u._id}>
+          {u.name || u.email}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/*
+Reports whether Deal Won or Deal Lost can ever fire.
+
+The trigger reads a marking on the stage, not its name, so an account whose
+"Closed - Won" column is unmarked gets a workflow that looks finished and never
+runs. That is the exact failure this whole piece of work was about, so it is
+caught here, at the moment somebody picks the trigger, rather than left for them
+to discover.
+*/
+function WonLostNote({ kind, stages }: { kind: "won" | "lost"; stages: Stage[] }) {
+  const marked = stages.filter((st) => st.kind === kind);
+  const word = kind === "won" ? "Won" : "Lost";
+
+  if (marked.length === 0) {
+    return (
+      <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        No stage is marked as {word} yet, so this trigger will never run. Open a
+        column&apos;s menu on the Board and set its outcome to {word}.
+      </p>
+    );
+  }
+  return (
+    <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+      Runs when a contact reaches any stage marked as <b>{word}</b>:{" "}
+      {marked.map((st) => st.name).join(", ")}.
+    </p>
+  );
+}
+
+/*
+The inbound webhook address, with a copy button.
+
+Shown as a credential, because that is what it is: anyone holding this URL can
+create contacts in this account. It appears only once the workflow has been
+saved with the trigger, since the address is derived from the workflow's id.
+*/
+function WebhookAddress({ url }: { url?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  if (!url) {
+    return (
+      <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        Save this workflow to get its webhook address.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">Your webhook address</label>
+      <div className="flex gap-2">
+        <input readOnly value={url} className="input flex-1 font-mono text-xs" />
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch {
+              // Clipboard access can be refused; the field is selectable, so
+              // there is still a way to get the value.
+              setCopied(false);
+            }
+          }}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">
+        POST JSON here with any of <code>name</code>, <code>email</code>,{" "}
+        <code>phone</code>, <code>value</code>, <code>tags</code>. A contact
+        already on file is matched by email or phone rather than duplicated.
+      </p>
+      <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        Treat this like a password — anyone with it can add contacts to your
+        account. It only works once the workflow is published.
+      </p>
+    </div>
+  );
+}
+
 const DELAY_PRESETS = [
   { label: "1 hour", amount: "1", unit: "hours" },
   { label: "1 day", amount: "1", unit: "days" },
@@ -778,6 +1161,7 @@ function StepConfig({
   templates,
   pipelines,
   stages,
+  staff,
   onChange,
   onClose,
 }: {
@@ -786,6 +1170,7 @@ function StepConfig({
   templates: EmailTemplate[];
   pipelines: Pipeline[];
   stages: Stage[];
+  staff: User[];
   onChange: (patch: Partial<WorkflowStep>) => void;
   onClose: () => void;
 }) {
@@ -794,13 +1179,45 @@ function StepConfig({
   const setMany = (obj: Record<string, unknown>) => onChange({ config: { ...cfg, ...obj } });
   const str = (key: string) => (typeof cfg[key] === "string" ? (cfg[key] as string) : "");
 
-  const isDelay = item?.kind === "delay";
+  /*
+   * The step's own kind is checked as well as the catalog's.
+   *
+   * Steps saved before the timing steps were named properly carry type "delay",
+   * which is no longer a catalog key — so `item` is undefined for them and this
+   * panel would fall through to the Notes box, losing the duration fields on
+   * every wait in every existing workflow. The engine has the same fallback for
+   * the same reason: it decides a step is a delay from its kind, not its name.
+   */
+  const isDelay = item?.kind === "delay" || step.kind === "delay";
   const emailMode = str("mode") || (templates.length ? "template" : "custom");
+  /*
+   * Every step now has a form of its own, so the Notes fallback below should
+   * never render.
+   *
+   * It stays because the catalog and this file can still drift — a new step
+   * added to one and not the other — and a notes box is a far better landing
+   * than a blank panel with no explanation. The list is every key in
+   * SupportedSteps on the server, which is the thing it has to track.
+   */
   const hasDedicated =
     isDelay ||
-    ["send_email", "send_sms", "send_whatsapp", "add_tag", "remove_tag", "update_field", "if_else"].includes(
-      step.type,
-    );
+    [
+      "send_email",
+      "send_whatsapp",
+      "internal_notify",
+      "add_tag",
+      "remove_tag",
+      "update_field",
+      "assign_user",
+      "set_dnd",
+      "move_stage",
+      "update_deal_value",
+      "webhook_out",
+      "if_else",
+      "split",
+      "filter",
+      "goal_exit",
+    ].includes(step.type);
 
   return (
     <div>
@@ -943,10 +1360,128 @@ function StepConfig({
           </>
         )}
 
-        {step.type === "send_sms" && (
-          <Field label="Message">
-            <textarea className="input min-h-24" value={str("message")} onChange={(e) => set("message", e.target.value)} />
+        {step.type === "internal_notify" && (
+          <>
+            <Field label="Who should be told?">
+              <StaffPicker
+                value={str("userId")}
+                staff={staff}
+                anyLabel="Choose a team member…"
+                onChange={(v) => set("userId", v)}
+              />
+            </Field>
+            {/* An address as well as a staff picker, because the person who
+                should hear about a new lead is not always somebody with a
+                login — an agency's account manager, an accountant. */}
+            <Field label="…or an email address">
+              <input
+                className="input"
+                value={str("email")}
+                placeholder="someone@yourbusiness.com"
+                onChange={(e) => set("email", e.target.value)}
+              />
+            </Field>
+            <Field label="Subject">
+              <input
+                className="input"
+                value={str("subject")}
+                placeholder="New lead from the website"
+                onChange={(e) => set("subject", e.target.value)}
+              />
+            </Field>
+            <Field label="Anything to add">
+              <textarea
+                className="input min-h-20"
+                value={str("message")}
+                placeholder="Optional. The contact's name, phone, email and stage are always included."
+                onChange={(e) => set("message", e.target.value)}
+              />
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Sent from your own email connection, so it arrives with your domain
+              rather than from a stranger.
+            </p>
+          </>
+        )}
+
+        {step.type === "assign_user" && (
+          <Field label="Assign the contact to">
+            <StaffPicker
+              value={str("userId")}
+              staff={staff}
+              anyLabel="Choose a team member…"
+              onChange={(v) => set("userId", v)}
+            />
           </Field>
+        )}
+
+        {step.type === "set_dnd" && (
+          <>
+            <Field label="Do Not Disturb">
+              <select
+                className="input"
+                value={str("state") || "on"}
+                onChange={(e) => set("state", e.target.value)}
+              >
+                <option value="on">Turn on — stop messaging this contact</option>
+                <option value="off">Turn off — they can be messaged again</option>
+              </select>
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Stops every automated email and WhatsApp message to this contact,
+              from every workflow and every stage sequence. You can still message
+              them by hand.
+            </p>
+          </>
+        )}
+
+        {step.type === "update_deal_value" && (
+          <>
+            <Field label="How should the value change?">
+              <select
+                className="input"
+                value={str("mode") || "set"}
+                onChange={(e) => set("mode", e.target.value)}
+              >
+                <option value="set">Set it to this amount</option>
+                <option value="add">Add this amount to what is already there</option>
+              </select>
+            </Field>
+            <Field label="Amount">
+              <input
+                className="input"
+                type="number"
+                value={str("amount")}
+                onChange={(e) => set("amount", e.target.value)}
+              />
+            </Field>
+          </>
+        )}
+
+        {step.type === "webhook_out" && (
+          <>
+            <Field label="URL">
+              <input
+                className="input font-mono text-xs"
+                value={str("url")}
+                placeholder="https://example.com/hooks/lead"
+                onChange={(e) => set("url", e.target.value)}
+              />
+            </Field>
+            <Field label="Shared secret (optional)">
+              <input
+                className="input font-mono text-xs"
+                value={str("secret")}
+                placeholder="Sent as the X-Arkquen-Secret header"
+                onChange={(e) => set("secret", e.target.value)}
+              />
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              POSTs the contact as JSON: name, email, phone, value, tags, stage
+              and pipeline. Must be a public address — private and internal
+              addresses are refused.
+            </p>
+          </>
         )}
 
         {step.type === "send_whatsapp" && (
@@ -966,17 +1501,110 @@ function StepConfig({
 
         {step.type === "update_field" && (
           <>
+            {/* A list rather than a text box. The engine only writes the fields
+                a contact actually has, so a typed field name was a step that
+                looked configured and did nothing. */}
             <Field label="Field">
-              <input className="input" value={str("field")} onChange={(e) => set("field", e.target.value)} placeholder="e.g. status" />
+              <select
+                className="input"
+                value={str("field")}
+                onChange={(e) => set("field", e.target.value)}
+              >
+                <option value="">Choose a field…</option>
+                <option value="name">Name</option>
+                <option value="email">Email</option>
+                <option value="phone">Phone</option>
+                <option value="value">Deal value</option>
+              </select>
             </Field>
             <Field label="Value">
-              <input className="input" value={str("value")} onChange={(e) => set("value", e.target.value)} />
+              <input
+                className="input"
+                type={str("field") === "value" ? "number" : "text"}
+                value={str("value")}
+                onChange={(e) => set("value", e.target.value)}
+              />
             </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              To label a contact rather than change their details, use Add Tag —
+              tags are what conditions in other workflows can ask about.
+            </p>
           </>
         )}
 
-        {/* Any delay/timing step gets the duration UI with quick presets. */}
-        {isDelay && (
+        {/* Waiting until a named moment, rather than for a duration. */}
+        {step.type === "wait_until" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Date">
+                <input
+                  className="input"
+                  type="date"
+                  value={str("date")}
+                  onChange={(e) => set("date", e.target.value)}
+                />
+              </Field>
+              <Field label="Time">
+                <input
+                  className="input"
+                  type="time"
+                  value={str("time") || "09:00"}
+                  onChange={(e) => set("time", e.target.value)}
+                />
+              </Field>
+            </div>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Indian time. If the date has already passed, the workflow carries
+              straight on rather than waiting a year.
+            </p>
+          </>
+        )}
+
+        {step.type === "business_hours" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Day starts">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={str("startHour") || "9"}
+                  onChange={(e) => set("startHour", e.target.value)}
+                />
+              </Field>
+              <Field label="Day ends">
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={str("endHour") || "18"}
+                  onChange={(e) => set("endHour", e.target.value)}
+                />
+              </Field>
+            </div>
+            <Field label="Weekends">
+              <select
+                className="input"
+                value={str("weekends") || "skip"}
+                onChange={(e) => set("weekends", e.target.value)}
+              >
+                <option value="skip">Skip Saturday and Sunday</option>
+                <option value="include">Weekends count as working days</option>
+              </select>
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Hours are on a 24-hour clock, Indian time. Inside these hours the
+              workflow carries straight on — it only pauses when it is outside
+              them.
+            </p>
+          </>
+        )}
+
+        {/* The plain duration wait. Wait Until and Business Hours are delays
+            too but mean something else entirely, so they are excluded. */}
+        {isDelay && step.type !== "wait_until" && step.type !== "business_hours" && (
           <>
             <div>
               <p className="mb-1.5 text-sm font-medium">Quick presets</p>
@@ -1017,29 +1645,123 @@ function StepConfig({
           </>
         )}
 
-        {step.type === "if_else" && (
+        {step.type === "split" && (
           <>
-            <Field label="Field">
-              <input className="input" value={str("field")} onChange={(e) => set("field", e.target.value)} placeholder="e.g. tag, stage, value" />
+            <Field label="Percentage down the Yes path">
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={99}
+                value={str("percent") || "50"}
+                onChange={(e) => set("percent", e.target.value)}
+              />
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Each contact is decided independently when they reach this step, so
+              the split comes out near your percentage over a few hundred people
+              rather than exactly on every one.
+            </p>
+          </>
+        )}
+
+        {/* One condition form for the three steps that ask a question. They
+            differ only in what happens with the answer, which the note below
+            spells out — the fields themselves are identical, and three copies
+            of them is three places for the field list to drift. */}
+        {(step.type === "if_else" || step.type === "filter" || step.type === "goal_exit") && (
+          <>
+            <Field label="Ask about">
+              <select
+                className="input"
+                value={str("field")}
+                onChange={(e) => set("field", e.target.value)}
+              >
+                <option value="">Choose…</option>
+                <option value="tag">Tag</option>
+                <option value="email">Email</option>
+                <option value="phone">Phone</option>
+                <option value="name">Name</option>
+                <option value="value">Deal value</option>
+                <option value="stage">Stage</option>
+                <option value="dnd">Do Not Disturb</option>
+                <option value="assigned">Assigned team member</option>
+              </select>
             </Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Operator">
-                <select className="input" value={str("operator") || "equals"} onChange={(e) => set("operator", e.target.value)}>
-                  <option value="equals">Equals</option>
-                  <option value="not_equals">Not equals</option>
-                  <option value="contains">Contains</option>
-                  <option value="greater">Greater than</option>
-                  <option value="less">Less than</option>
-                  <option value="exists">Exists</option>
+              <Field label="Test">
+                <select
+                  className="input"
+                  value={str("operator") || "equals"}
+                  onChange={(e) => set("operator", e.target.value)}
+                >
+                  {str("field") === "tag" ? (
+                    <>
+                      <option value="equals">Has this tag</option>
+                      <option value="not_equals">Does not have this tag</option>
+                      <option value="exists">Has any tag</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="equals">Equals</option>
+                      <option value="not_equals">Does not equal</option>
+                      <option value="contains">Contains</option>
+                      <option value="not_contains">Does not contain</option>
+                      <option value="greater">Greater than</option>
+                      <option value="less">Less than</option>
+                      <option value="exists">Is set</option>
+                      <option value="not_exists">Is empty</option>
+                    </>
+                  )}
                 </select>
               </Field>
               <Field label="Value">
-                <input className="input" value={str("value")} onChange={(e) => set("value", e.target.value)} />
+                {str("field") === "stage" ? (
+                  <StagePicker
+                    value={str("value")}
+                    pipelines={pipelines}
+                    stages={stages}
+                    anyLabel="Choose a stage…"
+                    onChange={(v) => set("value", v)}
+                  />
+                ) : str("field") === "assigned" ? (
+                  <StaffPicker
+                    value={str("value")}
+                    staff={staff}
+                    anyLabel="Choose a team member…"
+                    onChange={(v) => set("value", v)}
+                  />
+                ) : str("field") === "dnd" ? (
+                  <select
+                    className="input"
+                    value={str("value") || "true"}
+                    onChange={(e) => set("value", e.target.value)}
+                  >
+                    <option value="true">Is on Do Not Disturb</option>
+                    <option value="false">Is not on Do Not Disturb</option>
+                  </select>
+                ) : (
+                  <input
+                    className="input"
+                    value={str("value")}
+                    onChange={(e) => set("value", e.target.value)}
+                  />
+                )}
               </Field>
             </div>
-            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              Matching contacts follow the <span className="font-medium text-emerald-600">Yes</span>{" "}
-              branch; everyone else follows <span className="font-medium text-rose-600">No</span>.
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {step.type === "if_else" ? (
+                <>
+                  Matching contacts follow the{" "}
+                  <span className="font-medium text-emerald-600">Yes</span> branch;
+                  everyone else follows{" "}
+                  <span className="font-medium text-rose-600">No</span>.
+                </>
+              ) : step.type === "filter" ? (
+                "Only matching contacts carry on. Everyone else stops here — the rest of the workflow does not run for them."
+              ) : (
+                "Matching contacts stop here, having reached the goal. Everyone else carries on to the next step."
+              )}
             </p>
           </>
         )}
@@ -1087,7 +1809,44 @@ const ACTIVITY_STYLE: Record<string, { icon: string; cls: string }> = {
   whatsapp_failed: { icon: "✕", cls: "text-rose-600" },
   whatsapp_skipped: { icon: "▲", cls: "text-amber-600" },
   delay: { icon: "⏱", cls: "text-slate-500" },
+  // A wait that did not wait — Business Hours inside its own hours, or a date
+  // already past. Distinct from "delay" so nobody reads it as a pause.
+  waited: { icon: "⏱", cls: "text-slate-500" },
   branch: { icon: "⑃", cls: "text-blue-600" },
+  notified: { icon: "🔔", cls: "text-emerald-600" },
+  notify_failed: { icon: "✕", cls: "text-rose-600" },
+  notify_skipped: { icon: "▲", cls: "text-amber-600" },
+  tagged: { icon: "🏷", cls: "text-emerald-600" },
+  untagged: { icon: "🏷", cls: "text-slate-600" },
+  tag_skipped: { icon: "▲", cls: "text-amber-600" },
+  tag_failed: { icon: "✕", cls: "text-rose-600" },
+  field_updated: { icon: "✎", cls: "text-emerald-600" },
+  field_skipped: { icon: "▲", cls: "text-amber-600" },
+  field_failed: { icon: "✕", cls: "text-rose-600" },
+  value_updated: { icon: "₹", cls: "text-emerald-600" },
+  value_skipped: { icon: "▲", cls: "text-amber-600" },
+  value_failed: { icon: "✕", cls: "text-rose-600" },
+  assigned: { icon: "👤", cls: "text-emerald-600" },
+  assign_skipped: { icon: "▲", cls: "text-amber-600" },
+  assign_failed: { icon: "✕", cls: "text-rose-600" },
+  dnd_set: { icon: "🛡", cls: "text-slate-600" },
+  dnd_skipped: { icon: "▲", cls: "text-amber-600" },
+  dnd_failed: { icon: "✕", cls: "text-rose-600" },
+  webhook_sent: { icon: "🔗", cls: "text-emerald-600" },
+  webhook_skipped: { icon: "▲", cls: "text-amber-600" },
+  webhook_failed: { icon: "✕", cls: "text-rose-600" },
+  stage_moved: { icon: "➡", cls: "text-emerald-600" },
+  stage_skipped: { icon: "▲", cls: "text-amber-600" },
+  stage_failed: { icon: "✕", cls: "text-rose-600" },
+  /*
+   * Two ways a run ends early, and neither is a failure.
+   *
+   * A filter that did not match and a goal that was reached are both correct
+   * outcomes. Showing either in red would have somebody debugging a workflow
+   * that is working exactly as designed.
+   */
+  filtered: { icon: "⊘", cls: "text-slate-500" },
+  goal_met: { icon: "🎯", cls: "text-emerald-700" },
   completed: { icon: "✓", cls: "text-emerald-700" },
   // A run that finished with steps that never ran is not a success. It used to
   // show the same green tick as a clean run, which is how you demo a WhatsApp

@@ -426,7 +426,42 @@ export default function ContactsPage() {
                       className="h-4 w-4 cursor-pointer accent-blue-600"
                     />
                   </td>
-                  <td className="px-3 py-2 font-medium">{c.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {c.name}
+                      {/* Do Not Disturb has to be visible on the list, not
+                          only inside the edit dialog. Somebody picking who to
+                          include in a broadcast is looking at this table, and
+                          the whole point of the setting is that it changes the
+                          answer. */}
+                      {c.dnd && (
+                        <span
+                          title="Do Not Disturb — automation will not message this contact"
+                          className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-amber-800 uppercase"
+                        >
+                          ⊘ DND
+                        </span>
+                      )}
+                      {/* Two tags, then a count. A contact with eleven tags
+                          must not push the rest of the row off the screen. */}
+                      {c.tags?.slice(0, 2).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-normal text-slate-600"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {(c.tags?.length ?? 0) > 2 && (
+                        <span
+                          title={c.tags?.join(", ")}
+                          className="text-[11px] font-normal text-slate-400"
+                        >
+                          +{(c.tags?.length ?? 0) - 2}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-slate-600">{c.phone || "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{c.email || "—"}</td>
                   <td className="px-3 py-2">
