@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { Select } from "@/components/kit/Select";
 import { useAsk } from "@/components/PromptProvider";
 import type { BoardAutomation, BoardResponse, Pipeline, Stage } from "@/lib/types";
 import { Board } from "@/components/Board";
@@ -178,18 +179,22 @@ export default function BoardPage() {
           next to the one that adds rows. */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <select
+          {/*
+            Not a native select.
+
+            A native one renders its open list through the operating system, and
+            that popup takes no CSS — so the closed control sat in a neat
+            bordered box and the list dropping out of it was a bare white
+            rectangle with nothing around it.
+          */}
+          <Select
+            ariaLabel="Pipeline"
             value={activeId ?? ""}
-            onChange={(e) => selectPipeline(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-          >
-            {pipelines.length === 0 && <option value="">No pipelines yet</option>}
-            {pipelines.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            placeholder={pipelines.length === 0 ? "No pipelines yet" : "Select a pipeline"}
+            options={pipelines.map((p) => ({ value: p._id, label: p.name }))}
+            onChange={selectPipeline}
+            className="min-w-[180px]"
+          />
 
           <button
             onClick={createPipeline}
