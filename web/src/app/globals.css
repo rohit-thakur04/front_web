@@ -1,0 +1,690 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/*
+  =========================================================================
+  ARKQUEN DESIGN TOKENS
+  =========================================================================
+
+  The product this was rebuilt from is a white-label CRM, and the rebuild
+  inherited its look by inheriting its construction: cool slate greys, a blue
+  primary, 12px rounded cards, generous padding, tinted pill badges. That is
+  also what every other white-label CRM looks like, which is why recolouring it
+  would change nothing — the resemblance is in the shape, not the hue.
+
+  So these tokens take deliberate positions against that, chosen for what this
+  product actually is: an operations console for small Indian businesses, used
+  all day, often on a cheap Android phone, to make sure no enquiry is dropped.
+  Dense, fast and legible beats spacious and decorative.
+
+  1. WARM NEUTRALS, not cool slate. The entire inherited palette is blue-grey.
+     A warm grey reads as paper and ink rather than as dashboard chrome, and it
+     is the single change that most stops a screenshot looking familiar.
+
+  2. TEAL PRIMARY, not blue. Blue is the inherited accent and the default of
+     the category. Teal is distinguishable at a glance, holds up on both
+     themes, and leaves blue free to mean nothing at all.
+
+  3. TIGHTER RADII. 6px, not 12px. Rounded cards are the house style of the
+     thing being differentiated from; a squarer surface reads as a tool.
+
+  4. TWO ELEVATIONS ONLY, resting and overlay. The inherited design leans on
+     shadow for hierarchy; this one leans on borders and spacing, which stay
+     legible on a cheap screen in daylight.
+
+  Every value is a variable so a screen can never invent its own.
+*/
+:root {
+  /* --- Surfaces, warm-neutral ------------------------------------------ */
+  --ark-bg: #f7f6f3;
+  --ark-surface: #ffffff;
+  --ark-surface-2: #f2f1ed;
+  --ark-surface-3: #e9e7e1;
+  --ark-overlay: #ffffff;
+
+  /* --- Ink -------------------------------------------------------------- */
+  --ark-ink: #1a1917;
+  --ark-ink-2: #46443f;
+  --ark-ink-3: #6b6760;
+  --ark-ink-muted: #918c83;
+  --ark-ink-inverse: #fbfaf8;
+
+  /* --- Lines ------------------------------------------------------------ */
+  --ark-line: #e2e0d9;
+  --ark-line-strong: #cfccc2;
+
+  /* --- Primary: teal ---------------------------------------------------- */
+  --ark-primary: #0f766e;
+  --ark-primary-hover: #115e58;
+  --ark-primary-ink: #ffffff;
+  --ark-primary-soft: #d8f0ed;
+  --ark-primary-soft-ink: #0b544e;
+  --ark-focus: rgba(15, 118, 110, 0.28);
+
+  /* --- Semantic --------------------------------------------------------- */
+  --ark-ok: #10704a;
+  --ark-ok-soft: #d6f0e2;
+  --ark-ok-ink: #0a5234;
+
+  --ark-warn: #a35b06;
+  --ark-warn-soft: #fbeacb;
+  --ark-warn-ink: #7a4305;
+
+  --ark-danger: #b42318;
+  --ark-danger-soft: #fbddd9;
+  --ark-danger-ink: #8a1b13;
+
+  --ark-info: #46443f;
+  --ark-info-soft: #eceae4;
+  --ark-info-ink: #46443f;
+
+  /* --- Radius: squarer than the category default ----------------------- */
+  --ark-r-sm: 4px;
+  --ark-r-md: 6px;
+  --ark-r-lg: 10px;
+  --ark-r-full: 9999px;
+
+  /* --- Elevation: resting and overlay, nothing in between -------------- */
+  --ark-shadow-rest: 0 1px 0 rgba(26, 25, 23, 0.04);
+  --ark-shadow-overlay: 0 16px 40px -12px rgba(26, 25, 23, 0.28);
+
+  /* --- Row rhythm. Dense on purpose: these tables are read, not admired. */
+  --ark-row-h: 38px;
+  --ark-control-h: 34px;
+}
+
+html.dark {
+  /* Warm-neutral darks rather than the usual blue-black, so the theme is
+     recognisably the same product with the lights off. */
+  --ark-bg: #16150f;
+  --ark-surface: #1e1d17;
+  --ark-surface-2: #262419;
+  --ark-surface-3: #332f22;
+  --ark-overlay: #24231c;
+
+  --ark-ink: #f5f3ec;
+  --ark-ink-2: #ddd9cd;
+  --ark-ink-3: #b5b0a2;
+  --ark-ink-muted: #8c8779;
+  --ark-ink-inverse: #16150f;
+
+  --ark-line: #332f22;
+  --ark-line-strong: #46412f;
+
+  /* Lifted, because the light-theme teal goes muddy on a dark surface. */
+  --ark-primary: #2dd4bf;
+  --ark-primary-hover: #5eead4;
+  --ark-primary-ink: #0b2e2a;
+  --ark-primary-soft: rgba(45, 212, 191, 0.16);
+  --ark-primary-soft-ink: #7fe8db;
+  --ark-focus: rgba(45, 212, 191, 0.32);
+
+  --ark-ok: #34d399;
+  --ark-ok-soft: rgba(52, 211, 153, 0.16);
+  --ark-ok-ink: #86efc5;
+
+  --ark-warn: #fbbf24;
+  --ark-warn-soft: rgba(251, 191, 36, 0.16);
+  --ark-warn-ink: #fcd77e;
+
+  --ark-danger: #fb7185;
+  --ark-danger-soft: rgba(251, 113, 133, 0.16);
+  --ark-danger-ink: #fda4af;
+
+  --ark-info: #b5b0a2;
+  --ark-info-soft: rgba(181, 176, 162, 0.14);
+  --ark-info-ink: #ddd9cd;
+
+  --ark-shadow-rest: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --ark-shadow-overlay: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  /* From the tokens, so the page behind the shell is the same warm neutral as
+     the shell itself rather than the cool slate it was. */
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+}
+
+/*
+  Interactive controls get the hand cursor.
+
+  Tailwind v3's Preflight set `cursor: pointer` on buttons; v4 removed it to
+  match the raw browser default, which is an arrow. Nothing in the app asked for
+  that change and it landed on all 210 buttons at once — so the sidebar links
+  showed a hand while every button beside them, "+ New pipeline" and "Delete
+  pipeline" included, showed an arrow. Two controls that behave identically
+  should not disagree about what they are.
+
+  Disabled controls are excluded so they can say "not here" instead, and the
+  explicit `disabled:cursor-not-allowed` already on some buttons still wins.
+
+  In @layer base so any cursor utility written on an element overrides it.
+*/
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  summary {
+    cursor: pointer;
+  }
+}
+
+/*
+  Shared form control styling. Every form in the app routes through this, which
+  is why the polish lives here rather than being written onto each field.
+
+  The focus treatment is a ring rather than only a border colour change. A
+  one-pixel border going from grey to near-black is a change somebody has to
+  look for, and on the dark theme it was almost invisible — so a keyboard user
+  could not tell which of eight fields they were in. The ring is drawn with
+  box-shadow so it costs no layout and cannot shift the field as it appears.
+*/
+@utility input {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-slate-300);
+  padding: --spacing(2) --spacing(3);
+  font-size: var(--text-sm);
+  background-color: #fff;
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+
+  &::placeholder {
+    color: var(--color-slate-400);
+  }
+
+  &:hover:not(:disabled):not(:focus) {
+    border-color: var(--color-slate-400);
+  }
+
+  &:focus {
+    border-color: var(--ark-primary);
+    box-shadow: 0 0 0 3px var(--ark-focus);
+  }
+
+  &:disabled {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-400);
+    cursor: not-allowed;
+  }
+
+  /* A field the browser has judged invalid should say so without waiting for a
+     submit, but only once it has been left — nagging while somebody is still
+     typing their email reads as the form fighting them. */
+  &:not(:placeholder-shown):not(:focus):invalid {
+    border-color: var(--color-rose-400);
+  }
+}
+
+/*
+  --- Interaction polish, applied once ------------------------------------
+
+  The app is authored as Tailwind utilities on each element, so there is no
+  component layer to improve. These rules are the shared layer: they reach every
+  screen without a single page being edited, which also means they must be
+  conservative enough not to fight anything written locally. Everything here is
+  in @layer base for exactly that reason — any utility on an element wins.
+*/
+@layer base {
+  /*
+    A visible focus ring on everything focusable.
+
+    focus-visible, not focus, so it appears for keyboard navigation and not on
+    every mouse click. Before this, tabbing through the app showed the browser
+    default — which Tailwind's Preflight removes — leaving no indication of
+    position at all for anyone not using a mouse.
+  */
+  :focus-visible {
+    outline: 2px solid var(--ark-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /*
+    Only `.input` opts out of the generic ring, because only `.input` has one of
+    its own.
+
+    This used to name `input`, `select` and `textarea` as well, which removed
+    the outline from every field in the product — including the ones that
+    hand-roll their own border classes instead of using the utility, such as the
+    contact dialog's. Those had no replacement ring, so they ended up with no
+    focus indicator at all and a keyboard user could not tell which field they
+    were in. Suppressing a fallback is only safe where something takes its
+    place.
+  */
+  .input:focus-visible {
+    outline: none;
+  }
+
+  /*
+    Buttons and links settle into their hover and active states instead of
+    snapping. 120ms is below the threshold where a control feels laggy and
+    above the one where the change is invisible.
+  */
+  button,
+  a,
+  [role="button"],
+  summary {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      box-shadow 120ms ease,
+      opacity 120ms ease;
+  }
+
+  /* A press is acknowledged. Tiny on purpose: enough to feel the click land,
+     not enough to read as the layout moving. */
+  button:not(:disabled):active,
+  [role="button"]:not(:disabled):active {
+    transform: translateY(0.5px);
+  }
+
+  /* Text selection in the product's own accent rather than the browser's. */
+  ::selection {
+    background-color: var(--ark-focus);
+  }
+
+  /*
+    Slimmer scrollbars on the panels that scroll — dialogs, the board, long
+    tables. The platform default is wide enough to crowd a narrow column.
+  */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-300);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-slate-400);
+  }
+
+  /*
+    Respect a reader who has asked for less movement. The transitions above are
+    small, but a motion preference is not a suggestion — and this product will
+    be used on cheap Android phones where animation also costs frames.
+  */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* TipTap renders into a bare contenteditable, so the editor needs explicit
+   styling for the block types the toolbar can produce. */
+.ProseMirror {
+  min-height: 280px;
+}
+.ProseMirror:focus {
+  outline: none;
+}
+.ProseMirror h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+.ProseMirror p {
+  margin: 0.4em 0;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.4rem;
+  margin: 0.4em 0;
+}
+.ProseMirror ul {
+  list-style: disc;
+}
+.ProseMirror ol {
+  list-style: decimal;
+}
+.ProseMirror blockquote {
+  border-left: 3px solid var(--color-slate-300);
+  padding-left: 0.8rem;
+  color: var(--color-slate-600);
+  margin: 0.5em 0;
+}
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--color-slate-300);
+  margin: 1em 0;
+}
+.ProseMirror a {
+  color: var(--color-blue-600);
+  text-decoration: underline;
+}
+.ProseMirror code {
+  background: var(--color-slate-100);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9em;
+}
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Checklists: TaskList renders <ul data-type="taskList"> with checkbox labels. */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2rem;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.25rem;
+}
+
+/* Placeholder text for an empty document. */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-slate-400);
+}
+
+/* --- Dark mode (centralized) ----------------------------------------------
+   The app is authored in light colours. Toggling the `dark` class on <html>
+   (via the top-bar switch, persisted in localStorage) remaps the light surfaces,
+   borders, text and soft tints to a dark palette from this one place, so every
+   page the user visits is dark without per-component changes. White TEXT is left
+   alone (only `bg-white` backgrounds are remapped), so buttons keep white labels. */
+
+/* Superseded by the tokens on `body` above; kept as the explicit dark pairing
+   so the two systems cannot disagree about the page behind everything. */
+html.dark body {
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+}
+
+/* Surfaces */
+html.dark .bg-white { background-color: var(--ark-surface) !important; }
+html.dark .bg-white\/80 { background-color: rgba(23, 31, 46, 0.8) !important; }
+html.dark .bg-slate-50 { background-color: var(--ark-bg) !important; }
+html.dark .bg-slate-100 { background-color: var(--ark-surface-2) !important; }
+html.dark .bg-slate-200 { background-color: var(--ark-surface-3) !important; }
+
+/* Hover surfaces */
+html.dark .hover\:bg-white:hover { background-color: var(--ark-surface-2) !important; }
+html.dark .hover\:bg-slate-50:hover { background-color: var(--ark-surface-2) !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: var(--ark-surface-3) !important; }
+html.dark .hover\:bg-slate-200:hover { background-color: var(--ark-line-strong) !important; }
+
+/* Borders */
+html.dark .border-slate-100 { border-color: var(--ark-surface-2) !important; }
+html.dark .border-slate-200 { border-color: var(--ark-line) !important; }
+html.dark .border-slate-300 { border-color: var(--ark-line-strong) !important; }
+
+/* Neutral text */
+html.dark .text-slate-900 { color: var(--ark-ink) !important; }
+html.dark .text-slate-800 { color: var(--ark-ink) !important; }
+html.dark .text-slate-700 { color: var(--ark-ink-2) !important; }
+html.dark .text-slate-600 { color: var(--ark-ink-2) !important; }
+html.dark .text-slate-500 { color: var(--ark-ink-3) !important; }
+html.dark .text-slate-400 { color: var(--ark-ink-muted) !important; }
+
+/* Soft tint backgrounds → translucent so they read on dark */
+html.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.16) !important; }
+html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.16) !important; }
+html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.16) !important; }
+html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.22) !important; }
+html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.16) !important; }
+html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.16) !important; }
+html.dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.16) !important; }
+html.dark .hover\:bg-blue-50:hover { background-color: rgba(59, 130, 246, 0.22) !important; }
+html.dark .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.22) !important; }
+html.dark .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.22) !important; }
+
+/* Tint text → lighter for contrast on dark */
+html.dark .text-blue-700,
+html.dark .text-blue-600 { color: #93c5fd !important; }
+html.dark .text-emerald-700,
+html.dark .text-emerald-800,
+html.dark .text-emerald-600 { color: #6ee7b7 !important; }
+html.dark .text-amber-800,
+html.dark .text-amber-600 { color: #fcd34d !important; }
+html.dark .text-rose-700,
+html.dark .text-rose-600 { color: #fca5a5 !important; }
+html.dark .text-red-700,
+html.dark .text-red-600 { color: #fca5a5 !important; }
+html.dark .text-violet-600 { color: #c4b5fd !important; }
+
+/*
+  The dark end of every tint ramp.
+
+  An audit measured the dashboard's attention banner at 1.72:1 on dark — the one
+  component in the product whose entire job is to be noticed. It is
+  `bg-rose-50 text-rose-900`: the background was remapped to a translucent rose
+  and the text was not, because only rose-600 and rose-700 were listed. So
+  near-black red sat on a dark surface and the warning became the least legible
+  thing on screen.
+
+  Fourteen colours were used in the app with no dark pairing. These are the nine
+  that are dark enough to disappear; the remaining five are mid-tones that stay
+  legible either way. Fixed here as a class of bug rather than on the one
+  component that was measured, because the next component to use text-rose-900
+  would have failed in exactly the same way.
+*/
+html.dark .text-rose-900,
+html.dark .text-rose-800,
+html.dark .text-red-800 { color: #fca5a5 !important; }
+html.dark .text-amber-900,
+html.dark .text-amber-700 { color: #fcd34d !important; }
+html.dark .text-blue-900,
+html.dark .text-blue-800 { color: #93c5fd !important; }
+html.dark .text-emerald-900 { color: #6ee7b7 !important; }
+html.dark .text-violet-700 { color: #c4b5fd !important; }
+
+/* Buttons/marks authored as slate-900 stay high-contrast on dark. */
+html.dark .bg-slate-900 { background-color: var(--ark-primary) !important; }
+html.dark .hover\:bg-slate-800:hover { background-color: var(--ark-primary-hover) !important; }
+
+/* Native form controls default to white — force them dark. */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html.dark select,
+html.dark textarea {
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+  border-color: var(--ark-line);
+}
+html.dark .input {
+  background-color: var(--ark-bg) !important;
+  border-color: var(--ark-line) !important;
+  color: var(--ark-ink) !important;
+}
+html.dark ::placeholder { color: #8b98ab; }
+
+/* The new input states resolve through CSS variables, which the class remaps
+   above do not reach — so without these a disabled field or a hovered one would
+   keep its light-theme colour on the dark surface. */
+html.dark .input:hover:not(:disabled):not(:focus) { border-color: #45536f !important; }
+html.dark .input:focus {
+  border-color: var(--ark-primary) !important;
+  box-shadow: 0 0 0 3px var(--ark-focus) !important;
+}
+html.dark .input:disabled,
+html.dark input:disabled,
+html.dark select:disabled,
+html.dark textarea:disabled {
+  background-color: #141b29 !important;
+  color: #6b7789 !important;
+}
+
+/* A light thumb reads correctly on the dark surfaces; the track stays
+   transparent either way. */
+html.dark * { scrollbar-color: var(--ark-line-strong) transparent; }
+html.dark *::-webkit-scrollbar-thumb { background-color: var(--ark-line-strong); }
+html.dark *::-webkit-scrollbar-thumb:hover { background-color: #4b5a79; }
+
+/* Hover text colours.
+   Tailwind compiles `hover:text-slate-900` to `.hover\:text-slate-900:hover`,
+   a different selector from `.text-slate-900` — so the dark remaps above never
+   reached it and every hover fell back to the LIGHT theme value. On the dark
+   surface that is near-black text, which reads as the label vanishing. The
+   background hovers were remapped; the text ones were missed.
+
+   A hover state must be more visible than the resting state, never less, so
+   these all resolve lighter than the colour they replace. */
+html.dark .hover\:text-slate-900:hover { color: #f1f5f9 !important; }
+html.dark .hover\:text-slate-800:hover { color: #e6edf5 !important; }
+html.dark .hover\:text-slate-700:hover { color: #d3dbe6 !important; }
+html.dark .hover\:text-slate-600:hover { color: #c2cbd8 !important; }
+html.dark .hover\:text-slate-500:hover { color: #b3bdcc !important; }
+html.dark .hover\:text-blue-700:hover,
+html.dark .hover\:text-blue-600:hover { color: #bfdbfe !important; }
+html.dark .hover\:text-rose-600:hover { color: #fecaca !important; }
+html.dark .hover\:text-red-600:hover { color: #fecaca !important; }
+
+/* group-hover compiles to `.group:hover .group-hover\:text-*`, a third selector
+   shape the remaps above do not reach — so the sidebar's icons would darken on
+   hover against a dark surface, which reads as the icon disappearing under the
+   cursor. Same failure as the hover text colours, one variant along. */
+html.dark .group:hover .group-hover\:text-slate-600 { color: #c2cbd8 !important; }
+html.dark .group:hover .group-hover\:text-slate-900 { color: #f1f5f9 !important; }
+
+/* Modal scrims a touch deeper on dark. */
+html.dark .bg-black\/30,
+html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
+
+/*
+  --- One primary action ------------------------------------------------
+
+  An audit found the primary button teal on one screen and blue on thirteen.
+  The thirteen are not wrong individually — they are `bg-blue-600`, written
+  before there was a token to write instead — but a product whose main action
+  is two different colours does not look designed.
+
+  Only the FILLED action blues are redirected. The soft tints are left alone on
+  purpose: `bg-blue-50` with `text-blue-700` is an informational panel, and
+  turning every notice the same colour as every button would remove the one
+  distinction that makes a primary action primary.
+
+  Applied in both themes rather than only on dark, because this is the
+  inconsistency itself and not a dark-mode repair. It carries !important for
+  the same reason the dark remaps do: it has to beat a utility written directly
+  on the element, and the alternative is editing a hundred files.
+*/
+.bg-blue-600,
+.bg-blue-700 {
+  background-color: var(--ark-primary) !important;
+}
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-600:hover {
+  background-color: var(--ark-primary-hover) !important;
+}
+/* Borders and rings on those same action controls. */
+.border-blue-600,
+.focus-within\:border-blue-500:focus-within {
+  border-color: var(--ark-primary) !important;
+}
+.focus-within\:ring-blue-500\/20:focus-within {
+  --tw-ring-color: var(--ark-focus) !important;
+}
+
+/* The active nav pill and progress fills follow the same accent. */
+.bg-blue-600 {
+  color: var(--ark-primary-ink) !important;
+}
+
+/* --- Chart tokens -------------------------------------------------------
+   Every value below was run through the dataviz validator against THIS app's
+   surfaces, not a generic one: contrast and CVD results only mean anything
+   against the surface the chart actually renders on.
+
+   Those surfaces moved. The dark one was #171f2e when `.bg-white` was remapped
+   to a cool navy; it is now the warm --ark-surface, so --viz-surface follows it
+   rather than describing a colour the app no longer paints. The series and ramp
+   values are unchanged: they were validated against a surface of roughly this
+   luminance, and re-stepping them is a job for the validator rather than for a
+   guess made while moving a background.
+
+   Charts are written against these roles, never raw hex, so the light/dark swap
+   happens in one place. The app themes by an html.dark class, so that is what
+   these key off. */
+.viz {
+  --viz-surface: #ffffff;
+  --viz-ink: #0b0b0b;
+  --viz-ink-2: #52514e;
+  --viz-muted: #898781;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
+  /* Categorical slots 1–3, in the fixed order. Never cycled, never reordered:
+     the ordering is the CVD-safety mechanism. */
+  --viz-s1: #2a78d6;
+  --viz-s2: #eb6834;
+  --viz-s3: #1baf7a;
+
+  /* Ordinal blue ramp for magnitude. Light end clears 2:1 on the surface. */
+  --viz-o1: #86b6ef;
+  --viz-o2: #5598e7;
+  --viz-o3: #2a78d6;
+  --viz-o4: #1c5cab;
+  --viz-o5: #104281;
+
+  /* Meter: fill plus a lighter step of its own ramp as the track. */
+  --viz-fill: #2a78d6;
+  --viz-track: #cde2fb;
+}
+
+html.dark .viz {
+  --viz-surface: var(--ark-surface);
+  --viz-ink: #f1f5f9;
+  --viz-ink-2: #c3c2b7;
+  --viz-muted: #898781;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+
+  --viz-s1: #3987e5;
+  --viz-s2: #d95926;
+  --viz-s3: #199e70;
+
+  /* Re-stepped for the dark band, not an automatic flip of the light ramp. */
+  --viz-o1: #b7d3f6;
+  --viz-o2: #86b6ef;
+  --viz-o3: #5598e7;
+  --viz-o4: #2a78d6;
+  --viz-o5: #184f95;
+
+  --viz-fill: #86b6ef;
+  --viz-track: #184f95;
+}
