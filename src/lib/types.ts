@@ -8,6 +8,10 @@ export interface User {
   name: string;
   role: Role;
   planId?: string | null;
+  /** When the client's plan subscription started; monthly AI quotas renew from it. */
+  planStartedAt?: string | null;
+  /** Absent means active. */
+  subscriptionStatus?: SubscriptionStatus | "";
   // Workflow allowance for a client account. 0 or absent means unlimited.
   workflowLimit?: number;
   // Set only on staff accounts: the client that owns this staff member.
@@ -215,6 +219,14 @@ export interface FormSubmission {
   formName: string;
   answers: FormAnswer[];
   cardId?: string | null;
+  /** Where it came from. Absent on submissions recorded before attribution. */
+  source?: {
+    funnelId?: string;
+    page?: string;
+    source: string;
+    medium?: string;
+    campaign?: string;
+  } | null;
   createdAt: string;
 }
 
@@ -481,9 +493,36 @@ export interface Plan {
   features: Record<string, boolean>;
   addOns: PlanAddOns;
   lifecycle: PlanLifecycle;
+  /** The AI assistant entitlement. Absent on older plans = not included. */
+  chatbot?: PlanChatbot;
   createdAt: string;
   updatedAt: string;
 }
+
+/** AI assistant settings on a plan. A limit of 0 means no limit. */
+export interface PlanChatbot {
+  enabled: boolean;
+  monthlyMessageLimit: number;
+  monthlyTokenLimit: number;
+  maxConversations: number;
+  maxConcurrent: number;
+  /** "provider:model" ids. */
+  allowedModels: string[];
+  knowledgeBaseEnabled: boolean;
+  crmAssistantEnabled: boolean;
+  actionAssistantEnabled: boolean;
+  documentUploadEnabled: boolean;
+  maxStorageMB: number;
+  monthlyBudgetUsd: number;
+}
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "suspended"
+  | "cancelled"
+  | "expired";
 
 export interface Pipeline {
   _id: string;

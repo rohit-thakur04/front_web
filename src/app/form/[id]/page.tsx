@@ -123,9 +123,23 @@ export default function PublicFormPage() {
     setSending(true);
     setError("");
     try {
+      // Where the visitor came from. A funnel page adds funnel/page to this
+      // form's URL along with its own campaign params; a form link shared on its
+      // own carries whatever utm_* was put on it.
+      const q = new URLSearchParams(window.location.search);
       await api(`/public/forms/${id}/submit`, {
         method: "POST",
-        body: { answers: values, website: honeypot },
+        body: {
+          answers: values,
+          website: honeypot,
+          source: {
+            funnel: q.get("funnel") ?? "",
+            page: q.get("page") ?? "",
+            utmSource: q.get("utm_source") ?? "",
+            utmMedium: q.get("utm_medium") ?? "",
+            utmCampaign: q.get("utm_campaign") ?? "",
+          },
+        },
       });
       setDone(true);
     } catch (err) {

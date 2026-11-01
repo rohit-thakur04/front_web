@@ -181,6 +181,16 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: "Workspace",
     items: [
       {
+        /* Not feature-gated on purpose: a client without the assistant sees
+           the page explaining which plan includes it, rather than nothing. The
+           real gate is on every API call. */
+        href: "/assistant",
+        label: "AI Assistant",
+        icon: "Sparkle",
+        hint: "Ask about your contacts and pipeline",
+        keywords: ["ai", "assistant", "chatbot", "chat", "ask", "copilot", "gpt", "claude"],
+      },
+      {
         href: "/settings",
         label: "Settings",
         icon: "Sparkle",
@@ -207,6 +217,14 @@ export const NAV_GROUPS: NavGroup[] = [
         adminOnly: true,
         hint: "Entitlements and quotas",
         keywords: ["plans", "pricing", "billing", "limits", "features"],
+      },
+      {
+        href: "/ai-usage",
+        label: "AI Usage",
+        icon: "Dashboard",
+        adminOnly: true,
+        hint: "Chatbot usage, cost and upgrade requests",
+        keywords: ["ai", "chatbot", "usage", "tokens", "cost", "upgrade", "requests"],
       },
       {
         href: "/snapshots",

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { RowAction, RowActions } from "@/components/RowActions";
-import type { Form } from "@/lib/types";
+import { FORM_TEMPLATES, type FormTemplate } from "@/lib/formTemplates";
+import type { Form, FormField } from "@/lib/types";
 
 export function FormsTab() {
   const router = useRouter();
@@ -44,6 +45,22 @@ export function FormsTab() {
     });
   }, [forms, search, latestFirst]);
 
+  // Every way of making a form ends here: a normal form, opened in the builder so
+  // the client reviews it before publishing.
+  async function createFrom(name: string, fields: Omit<FormField, "id">[] = []) {
+    const created = await api<Form>("/forms", { method: "POST", body: { name, fields } });
+    router.push(`/lead-generation/forms/${created._id}`);
+  }
+
+  async function applyTemplate(t: FormTemplate) {
+    setError("");
+    try {
+      await createFrom(t.name, t.fields);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the form");
+    }
+  }
+
   async function remove(f: Form) {
     if (!window.confirm(`Delete "${f.name}"?`)) return;
     try {
@@ -77,12 +94,9 @@ export function FormsTab() {
       </div>
 
       {tab === "templates" ? (
-        <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
-          <p className="text-base font-semibold">Templates are coming soon</p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-            Ready-to-use form templates will land here. For now, start a form from scratch and build
-            your own.
-          </p>
+        <div>
+          {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+          <TemplateGrid onUse={applyTemplate} />
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -126,9 +140,8 @@ export function FormsTab() {
                 </button>
               </div>
               <button
-                disabled
-                title="Templates are not available yet"
-                className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-400"
+                onClick={() => setTab("templates")}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
               >
                 Templates
               </button>
@@ -244,9 +257,10 @@ export function FormsTab() {
       {creating && (
         <CreateFormDialog
           onClose={() => setCreating(false)}
-          onCreate={async () => {
-            const created = await api<Form>("/forms", { method: "POST", body: { name: "Untitled Form" } });
-            router.push(`/lead-generation/forms/${created._id}`);
+          onCreate={createFrom}
+          onTemplates={() => {
+            setCreating(false);
+            setTab("templates");
           }}
         />
       )}
@@ -254,27 +268,125 @@ export function FormsTab() {
   );
 }
 
-// The "Create New Form" chooser from the reference. Only "Start from Scratch" is
-// wired this pass; Templates and AI Builder are shown but disabled.
+function TemplateGrid({ onUse }: { onUse: (t: FormTemplate) => Promise<void> }) {
+  const [busy, setBusy] = useState("");
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {FORM_TEMPLATES.map((t) => (
+        <div key={t.key} className="flex flex-col rounded-xl border border-slate-200 bg-white p-4">
+          <p className="font-semibold">{t.name}</p>
+          <p className="mt-0.5 text-sm text-slate-500">{t.blurb}</p>
+          <ul className="mt-3 flex-1 space-y-0.5 text-xs text-slate-600">
+            {t.fields.map((f) => (
+              <li key={f.label}>
+                · {f.label}
+                {f.required && <span className="text-rose-500"> *</span>}
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={async () => {
+              setBusy(t.key);
+              await onUse(t);
+              setBusy("");
+            }}
+            disabled={!!busy}
+            className="mt-4 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {busy === t.key ? "Creating…" : "Use this template"}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The "Create New Form" chooser: blank, from a template, or drafted by AI.
 function CreateFormDialog({
   onClose,
   onCreate,
+  onTemplates,
 }: {
   onClose: () => void;
-  onCreate: () => Promise<void>;
+  onCreate: (name: string, fields?: Omit<FormField, "id">[]) => Promise<void>;
+  onTemplates: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The AI step replaces the three cards with a description box.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
 
   async function scratch() {
     setBusy(true);
     setError("");
     try {
-      await onCreate();
+      await onCreate("Untitled Form");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create form");
       setBusy(false);
     }
+  }
+
+  async function generate(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const draft = await api<{ name: string; fields: FormField[] }>("/forms/ai-generate", {
+        method: "POST",
+        body: { prompt },
+      });
+      await onCreate(draft.name, draft.fields);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate the form");
+      setBusy(false);
+    }
+  }
+
+  if (aiOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+        <form
+          onSubmit={generate}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+        >
+          <h2 className="text-xl font-semibold">Describe your form</h2>
+          <p className="mb-3 mt-1 text-sm text-slate-500">
+            Say what the business is and what you need to know about each lead. Uses the AI
+            provider connected in Settings → App Store. You can edit everything afterwards.
+          </p>
+          {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+          <textarea
+            required
+            autoFocus
+            rows={4}
+            maxLength={2000}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="A dental clinic in Pune taking appointment requests — which treatment, preferred day, and whether they're a new patient."
+            className="input w-full"
+          />
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setAiOpen(false)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
+              Back
+            </button>
+            <button
+              type="submit"
+              disabled={busy || !prompt.trim()}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {busy ? "Writing your form…" : "Generate form"}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
   }
 
   return (
@@ -303,51 +415,35 @@ function CreateFormDialog({
             <span className="mt-1 text-xs text-slate-500">{busy ? "Creating…" : "Build a blank form"}</span>
           </button>
 
-          {/*
-            Not built, and now saying so on screen.
-
-            It carried a cursor and a tooltip, which is no signal at all on a
-            touch device — there is no pointer to change and nothing to hover.
-            A badge works everywhere.
-
-            The old subtitle read "20+ ready-to-use forms". Those templates do
-            not exist, and advertising a quantity of something unbuilt is the
-            kind of claim that should not ship.
-          */}
-          <div
-            aria-disabled="true"
-            className="relative flex cursor-not-allowed flex-col items-center rounded-xl border border-dashed border-slate-300 p-6 text-center opacity-70"
+          <button
+            onClick={onTemplates}
+            disabled={busy}
+            className="group flex flex-col items-center rounded-xl border border-slate-200 p-6 text-center transition hover:border-blue-400 hover:bg-blue-50/40 disabled:opacity-60"
           >
-            <span className="absolute top-2 right-2 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-              Coming soon
-            </span>
             <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-500">
               ▤
             </span>
             <span className="font-semibold">From Templates</span>
             <span className="mt-1 text-xs text-slate-500">
-              Prebuilt forms are not available yet
+              {FORM_TEMPLATES.length} ready-made forms to start from
             </span>
-          </div>
+          </button>
 
-          <div
-            aria-disabled="true"
-            className="relative flex cursor-not-allowed flex-col items-center rounded-xl border border-dashed border-slate-300 p-6 text-center opacity-70"
+          <button
+            onClick={() => setAiOpen(true)}
+            disabled={busy}
+            className="group flex flex-col items-center rounded-xl border border-slate-200 p-6 text-center transition hover:border-blue-400 hover:bg-blue-50/40 disabled:opacity-60"
           >
-            <span className="absolute top-2 right-2 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-              Coming soon
-            </span>
             <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600">
               ✨
             </span>
             <span className="font-semibold">AI Builder</span>
-            {/* Names the dependency rather than only the absence, so somebody
-                who has connected a provider knows this is not waiting on them.
-                AI Studio writes pages and copy today, not forms. */}
+            {/* Names the dependency, so somebody without a provider knows what
+                this needs before they type a description. */}
             <span className="mt-1 text-xs text-slate-500">
-              Generating forms is not built yet
+              Describe it; uses your connected AI provider
             </span>
-          </div>
+          </button>
         </div>
       </div>
     </div>

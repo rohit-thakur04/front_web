@@ -2,17 +2,46 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import type { FeatureGroup, Plan } from "@/lib/types";
+import type { FeatureGroup, Plan, PlanChatbot } from "@/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
 import { Toggle } from "./ui";
 
-type Tab = "basic" | "pricing" | "features" | "checkout";
+type Tab = "basic" | "pricing" | "features" | "chatbot" | "checkout";
 const TABS: { key: Tab; label: string }[] = [
   { key: "basic", label: "Basic" },
   { key: "pricing", label: "Pricing & tax" },
   { key: "features", label: "Features" },
+  { key: "chatbot", label: "AI Chatbot" },
   { key: "checkout", label: "Checkout" },
 ];
+
+// A new plan does not include the assistant; turning it on is a deliberate,
+// paid decision. The limits pre-filled here only apply once it is.
+function blankChatbot(): PlanChatbot {
+  return {
+    enabled: false,
+    monthlyMessageLimit: 500,
+    monthlyTokenLimit: 1_000_000,
+    maxConversations: 50,
+    maxConcurrent: 2,
+    allowedModels: [],
+    knowledgeBaseEnabled: false,
+    crmAssistantEnabled: true,
+    actionAssistantEnabled: false,
+    documentUploadEnabled: false,
+    maxStorageMB: 0,
+    monthlyBudgetUsd: 0,
+  };
+}
+
+interface ChatbotModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  inputPerM: number;
+  outputPerM: number;
+  available: boolean;
+}
 
 // The editable shape of a plan. Mirrors the Go Plan model; the server fills any
 // omitted defaults on save.
@@ -52,6 +81,7 @@ function blankPlan(): Omit<Plan, "_id" | "ownerId" | "createdAt" | "updatedAt"> 
       customThemes: true,
     },
     lifecycle: { gracePeriodDays: 7, lockMode: "no_lock", overduePolicy: false },
+    chatbot: blankChatbot(),
   };
 }
 
@@ -64,7 +94,11 @@ interface Props {
 export function PlanEditor({ plan, onClose, onSaved }: Props) {
   const [tab, setTab] = useState<Tab>("basic");
   const [catalog, setCatalog] = useState<FeatureGroup[]>([]);
-  const [draft, setDraft] = useState(() => (plan ? { ...blankPlan(), ...plan } : blankPlan()));
+  // An existing plan saved before the assistant existed has no chatbot block;
+  // it gets the off-by-default one rather than undefined.
+  const [draft, setDraft] = useState(() =>
+    plan ? { ...blankPlan(), ...plan, chatbot: { ...blankChatbot(), ...plan.chatbot } } : blankPlan(),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -166,6 +200,7 @@ export function PlanEditor({ plan, onClose, onSaved }: Props) {
           {tab === "basic" && <BasicTab draft={draft} patch={patch} />}
           {tab === "pricing" && <PricingTab draft={draft} patch={patch} />}
           {tab === "features" && <FeaturesTab draft={draft} patch={patch} catalog={catalog} />}
+          {tab === "chatbot" && <ChatbotTab draft={draft} patch={patch} />}
           {tab === "checkout" && <CheckoutTab draft={draft} featureCount={featureCount} activeCycles={activeCycles} />}
         </div>
 
@@ -694,15 +729,109 @@ function FeaturesTab({
   );
 }
 
+/*
+ * The AI assistant entitlement for this plan.
+ *
+ * Every limit is enforced on the server for each request, not just shown here.
+ * Changes apply to every client on the plan from their next message.
+ */
+function ChatbotTab({ draft, patch }: { draft: Draft; patch: PatchFn }) {
+  const cb = draft.chatbot ?? blankChatbot();
+  const [models, setModels] = useState<ChatbotModelOption[]>([]);
+  useEffect(() => {
+    api<ChatbotModelOption[]>("/plans/chatbot-models").then(setModels).catch(() => setModels([]));
+  }, []);
+  const set = (p: Partial<PlanChatbot>) => patch({ chatbot: { ...cb, ...p } });
+  const toggleModel = (id: string, on: boolean) =>
+    set({ allowedModels: on ? [...cb.allowedModels, id] : cb.allowedModels.filter((m) => m !== id) });
+
+  const flags: [keyof PlanChatbot, string, string][] = [
+    ["crmAssistantEnabled", "CRM data assistant", "Answers questions about the client's own contacts, pipeline and forms."],
+    ["actionAssistantEnabled", "CRM action assistant", "Suggests moving contacts and adding tags; the user confirms each change."],
+    ["knowledgeBaseEnabled", "Knowledge base", "Reserved for the knowledge base, which is not built yet."],
+    ["documentUploadEnabled", "File / document upload", "Reserved for document upload, which is not built yet."],
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+        <div>
+          <p className="text-sm font-medium">Enable AI Chatbot</p>
+          <p className="text-xs text-slate-500">
+            Clients on this plan get the AI assistant. It runs on the platform&apos;s AI key, so
+            usage costs you money — the limits below cap it.
+          </p>
+        </div>
+        <Toggle checked={cb.enabled} onChange={(v) => set({ enabled: v })} />
+      </div>
+
+      <fieldset disabled={!cb.enabled} className="space-y-5 disabled:opacity-50">
+        <div>
+          <p className="mb-2 text-sm font-medium">Allowed AI models</p>
+          <div className="space-y-1.5">
+            {models.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={cb.allowedModels.includes(m.id)}
+                  onChange={(e) => toggleModel(m.id, e.target.checked)}
+                />
+                <span className="flex-1">{m.label}</span>
+                <span className="text-xs text-slate-500">
+                  ${m.inputPerM} in / ${m.outputPerM} out per 1M tokens
+                </span>
+                {!m.available && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                    no server key
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            The first allowed model is the default. Models marked &ldquo;no server key&rdquo; won&apos;t
+            run until their provider&apos;s key is set on the API server.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Monthly limits <span className="font-normal text-slate-500">(0 = no limit; renews on each client&apos;s billing date)</span></p>
+          <LimitRow label="AI messages per month" hint="Each question the client sends." value={cb.monthlyMessageLimit} onChange={(v) => set({ monthlyMessageLimit: v })} />
+          <LimitRow label="Tokens per month" hint="Input plus output tokens across all messages." value={cb.monthlyTokenLimit} onChange={(v) => set({ monthlyTokenLimit: v })} />
+          <LimitRow label="AI usage budget (USD) per month" hint="Estimated provider cost; the assistant stops when it's reached." value={cb.monthlyBudgetUsd} step={0.01} onChange={(v) => set({ monthlyBudgetUsd: v })} />
+          <LimitRow label="Maximum saved conversations" hint="Across the whole workspace." value={cb.maxConversations} onChange={(v) => set({ maxConversations: v })} />
+          <LimitRow label="Requests at the same time" hint="Per workspace. 1–3 keeps cost spikes in check." value={cb.maxConcurrent} onChange={(v) => set({ maxConcurrent: v })} />
+          <LimitRow label="Knowledge base storage (MB)" hint="Applies once the knowledge base ships." value={cb.maxStorageMB} onChange={(v) => set({ maxStorageMB: v })} />
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Assistant capabilities</p>
+          {flags.map(([key, label, hint]) => (
+            <div key={key} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-slate-500">{hint}</p>
+              </div>
+              <Toggle checked={Boolean(cb[key])} onChange={(v) => set({ [key]: v } as Partial<PlanChatbot>)} />
+            </div>
+          ))}
+        </div>
+      </fieldset>
+    </div>
+  );
+}
+
 function LimitRow({
   label,
   hint,
   value,
+  step,
   onChange,
 }: {
   label: string;
   hint: string;
   value: number;
+  step?: number;
   onChange: (v: number) => void;
 }) {
   return (
@@ -714,6 +843,7 @@ function LimitRow({
       <input
         type="number"
         min={0}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
         className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm"

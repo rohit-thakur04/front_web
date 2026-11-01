@@ -60,6 +60,14 @@ export function ContactSubmissions({ cardId }: { cardId: string }) {
           <div key={sub._id}>
             <p className="mb-1 text-xs text-slate-500">
               {sub.formName || "Form"} · {new Date(sub.createdAt).toLocaleString()}
+              {/* The campaign that brought them — the question a client asks
+                  about every lead, answered on the lead itself. */}
+              {sub.source && (
+                <span className="ml-1">
+                  · via {sub.source.source}
+                  {sub.source.campaign ? ` / ${sub.source.campaign}` : ""}
+                </span>
+              )}
             </p>
             <dl className="space-y-1">
               {sub.answers.map((a) => (

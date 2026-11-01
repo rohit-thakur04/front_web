@@ -75,6 +75,50 @@ export function URLsTab() {
   // days" is how somebody describes a weekly rotation, not "10080 minutes".
   const [everyCount, setEveryCount] = useState("7");
   const [everyUnit, setEveryUnit] = useState<"minutes" | "hours" | "days">("days");
+  // The link the form is editing, or null when it is creating one. One form for
+  // both, so editing can't drift from what creating allows.
+  const [editing, setEditing] = useState<ShortURL | null>(null);
+
+  function resetForm() {
+    setEditing(null);
+    setTarget("");
+    setTitle("");
+    setCampaign("");
+    setCode("");
+    setExtras([]);
+    setPrimaryWeight("1");
+    setMode("weighted");
+    setEveryClicks("100");
+    setEveryCount("7");
+    setEveryUnit("days");
+  }
+
+  function startEdit(link: ShortURL) {
+    const dests = link.destinations ?? [];
+    setEditing(link);
+    setTarget(dests[0]?.url ?? link.targetUrl);
+    setTitle(link.title);
+    setCampaign(link.campaign);
+    setCode(link.code);
+    setPrimaryWeight(String(dests[0]?.weight || 1));
+    setExtras(
+      dests.slice(1).map((d) => ({ url: d.url, label: d.label, weight: String(d.weight || 1) })),
+    );
+    setMode(link.rotationMode ?? "weighted");
+    setEveryClicks(String(link.rotateEveryClicks || 100));
+    const mins = link.rotateEveryMinutes || 0;
+    if (mins > 0 && mins % 1440 === 0) {
+      setEveryCount(String(mins / 1440));
+      setEveryUnit("days");
+    } else if (mins > 0 && mins % 60 === 0) {
+      setEveryCount(String(mins / 60));
+      setEveryUnit("hours");
+    } else {
+      setEveryCount(String(mins || 7));
+      setEveryUnit(mins ? "minutes" : "days");
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function load() {
     try {
@@ -96,7 +140,7 @@ export function URLsTab() {
     run();
   }, []);
 
-  async function create(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError("");
@@ -107,9 +151,10 @@ export function URLsTab() {
        * link in the list claim to be a rotator.
        */
       const filled = extras.filter((d) => d.url.trim() !== "");
-      // Blank or unparseable means an equal share. The server floors anything
-      // below 1 as well, so a destination can never end up starved.
-      const share = (w: string) => Number(w) || 1;
+      // Blank means an equal share. Anything typed is sent as typed, so a 0 or a
+      // negative is refused by the server with a message instead of quietly
+      // becoming 1 here.
+      const share = (w: string) => (w.trim() === "" ? undefined : Number(w));
       const destinations =
         filled.length > 0
           ? [
@@ -123,8 +168,8 @@ export function URLsTab() {
           : undefined;
 
       const UNIT_MINUTES = { minutes: 1, hours: 60, days: 1440 } as const;
-      const link = await api<ShortURL>("/urls", {
-        method: "POST",
+      const link = await api<ShortURL>(editing ? `/urls/${editing._id}` : "/urls", {
+        method: editing ? "PUT" : "POST",
         body: {
           targetUrl: target,
           title,
@@ -142,16 +187,14 @@ export function URLsTab() {
             : {}),
         },
       });
-      // Prepend rather than refetch: the list is sorted newest-first anyway.
-      setLinks((prev) => [link, ...prev]);
-      setTarget("");
-      setTitle("");
-      setCampaign("");
-      setCode("");
-      setExtras([]);
-      setPrimaryWeight("1");
+      // Replace in place on edit; prepend on create, since the list is sorted
+      // newest-first anyway.
+      setLinks((prev) =>
+        editing ? prev.map((l) => (l._id === link._id ? link : l)) : [link, ...prev],
+      );
+      resetForm();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create the link");
+      setError(e instanceof Error ? e.message : "Could not save the link");
     } finally {
       setSaving(false);
     }
@@ -186,9 +229,19 @@ export function URLsTab() {
   return (
     <div className="space-y-6">
       <form
-        onSubmit={create}
-        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2"
+        onSubmit={save}
+        className={`grid gap-4 rounded-xl border bg-white p-4 sm:grid-cols-2 ${
+          editing ? "border-blue-400" : "border-slate-200"
+        }`}
       >
+        {editing && (
+          <p className="text-sm font-medium sm:col-span-2">
+            Editing {shortLink(editing).replace(/^https?:\/\//, "")}
+            <span className="ml-1 font-normal text-slate-500">
+              — click counts are kept for every destination you don&apos;t remove.
+            </span>
+          </p>
+        )}
         <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium">Destination URL *</label>
           <input
@@ -401,7 +454,8 @@ export function URLsTab() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="Leave blank to generate one"
-            className="input"
+            disabled={!!editing}
+            className="input disabled:bg-slate-50 disabled:text-slate-500"
           />
           <p className="mt-1 text-xs text-slate-500">
             3–32 characters: letters, numbers, hyphen or underscore. The code can&apos;t be
@@ -409,14 +463,23 @@ export function URLsTab() {
           </p>
         </div>
 
-        <div className="sm:col-span-2">
+        <div className="flex gap-2 sm:col-span-2">
           <button
             type="submit"
             disabled={saving}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Creating…" : "Create short link"}
+            {saving ? "Saving…" : editing ? "Save changes" : "Create short link"}
           </button>
+          {editing && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </form>
 
@@ -497,6 +560,7 @@ export function URLsTab() {
                       >
                         {copied === l._id ? "Copied ✓" : "Copy"}
                       </button>
+                      <RowAction action="edit" label="Edit" onClick={() => startEdit(l)} />
                       <RowAction action="delete" label="Delete" onClick={() => remove(l)} />
                     </RowActions>
                   </td>

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAsk } from "@/components/PromptProvider";
 import type { Funnel, FunnelPage } from "@/lib/types";
 import { FunnelEditor } from "@/components/leadgen/FunnelEditor";
+import { FunnelAnalytics } from "@/components/leadgen/FunnelAnalytics";
 import { Icon } from "@/components/icons";
 
 type Tab = "pages" | "analytics" | "tracking" | "settings";
@@ -403,14 +404,33 @@ export default function FunnelDetailPage() {
         </div>
       )}
 
-      {tab !== "pages" && (
-        <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
-          <p className="text-base font-semibold capitalize">{tab}</p>
-          <p className="mt-1 text-sm text-slate-500">
-            {tab === "analytics" && "Traffic and conversion analytics for this funnel."}
-            {tab === "tracking" && "Add tracking pixels and scripts (GA, Meta Pixel, …)."}
-            {tab === "settings" && "Funnel name, domain, and SEO settings."}
+      {tab === "analytics" && <FunnelAnalytics funnelId={funnel._id} published={funnel.published} />}
+
+      {tab === "tracking" && (
+        <div className="max-w-2xl space-y-3 rounded-xl border border-slate-200 bg-white p-5 text-sm">
+          <p className="font-semibold">Campaign tracking is automatic</p>
+          <p className="text-slate-600">
+            Add <code>utm_source</code>, <code>utm_medium</code> and <code>utm_campaign</code> to the
+            links you share (for example{" "}
+            <code className="break-all">{funnel.publicUrl}/?utm_source=facebook&amp;utm_campaign=diwali</code>
+            ). Every view and every form submission on this funnel is recorded against them, and
+            the Analytics tab breaks results down by source. Forms embedded on these pages receive
+            the campaign automatically, and each contact&apos;s form answers show which source and
+            campaign they came from.
           </p>
+          <p className="font-semibold">Pixels and scripts</p>
+          <p className="text-slate-600">
+            Paste your Meta Pixel, Google Analytics or Google Tag Manager snippet into the page&apos;s
+            HTML in the editor, inside <code>&lt;head&gt;</code>. Published pages run their scripts
+            as written.
+          </p>
+        </div>
+      )}
+
+      {tab === "settings" && (
+        <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
+          <p className="text-base font-semibold">Settings</p>
+          <p className="mt-1 text-sm text-slate-500">Funnel name, domain, and SEO settings.</p>
           <span className="mt-4 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
             In development
           </span>

@@ -34,6 +34,12 @@ export function ClientEditDialog({
     user.workflowLimit ? String(user.workflowLimit) : "",
   );
   const [disabled, setDisabled] = useState(Boolean(user.disabled));
+  // The subscription on the plan. Status decides whether paid features such as
+  // the AI assistant keep running; the start date is when monthly quotas renew.
+  const initialStatus = user.subscriptionStatus || "active";
+  const initialStart = user.planStartedAt ? user.planStartedAt.slice(0, 10) : "";
+  const [status, setStatus] = useState<string>(initialStatus);
+  const [planStart, setPlanStart] = useState(initialStart);
   // Blank means "leave it alone" — an edit should not require knowing the
   // current password, and must not quietly reset it either.
   const [password, setPassword] = useState("");
@@ -70,6 +76,10 @@ export function ClientEditDialog({
       if (isClient) {
         body.planId = planId;
         body.workflowLimit = Number(workflowLimit) || 0;
+        if (status !== initialStatus) body.subscriptionStatus = status;
+        // Changing the plan starts a new billing period on the server, so the
+        // date is only sent when the admin set it by hand.
+        if (planStart && planStart !== initialStart) body.planStartedAt = planStart;
       }
       if (password.trim()) body.password = password;
 
@@ -147,9 +157,48 @@ export function ClientEditDialog({
               </select>
               <p className="mt-1 text-xs text-slate-500">
                 A plan decides which features this client sees and how much they
-                can create. No plan means everything, uncapped.
+                can create. No plan means everything, uncapped — except the AI
+                assistant, which only a plan that includes it can give.
               </p>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium" htmlFor="client-sub-status">
+                  Subscription
+                </label>
+                <select
+                  id="client-sub-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="input"
+                >
+                  <option value="active">Active</option>
+                  <option value="trialing">Trialing</option>
+                  <option value="past_due">Past due</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium" htmlFor="client-plan-start">
+                  Billing start
+                </label>
+                <input
+                  id="client-plan-start"
+                  type="date"
+                  value={planStart}
+                  onChange={(e) => setPlanStart(e.target.value)}
+                  className="input"
+                />
+              </div>
+            </div>
+            <p className="-mt-1 text-xs text-slate-500">
+              Monthly AI limits renew on the billing start day. Past due follows the
+              plan&apos;s grace period and lock mode; suspended, cancelled and expired
+              pause the AI assistant.
+            </p>
 
             <div>
               <label className="mb-1 block text-sm font-medium" htmlFor="client-workflows">
