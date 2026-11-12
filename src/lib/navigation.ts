@@ -227,6 +227,14 @@ export const NAV_GROUPS: NavGroup[] = [
         keywords: ["ai", "chatbot", "usage", "tokens", "cost", "upgrade", "requests"],
       },
       {
+        href: "/payments",
+        label: "Payments",
+        icon: "Money",
+        adminOnly: true,
+        hint: "Plan purchases, and any that need a person",
+        keywords: ["payments", "orders", "cashfree", "billing", "refund", "signup"],
+      },
+      {
         href: "/snapshots",
         label: "Snapshots",
         icon: "Layers",

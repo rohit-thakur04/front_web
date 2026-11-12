@@ -117,7 +117,7 @@ export function BarList({
                 onMouseLeave={clear}
               >
                 <div
-                  className="h-full rounded-full transition-all"
+                  className="ark-bar h-full rounded-full transition-all"
                   style={{ width: `${Math.max(pct, 1.5)}%`, background: hue }}
                 />
               </div>
@@ -185,7 +185,7 @@ export function AreaTrend({
 
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full"
+        className="ark-draw w-full"
         style={{ height }}
         preserveAspectRatio="none"
         role="img"
@@ -319,7 +319,7 @@ export function StackedColumns({
               }}
               onMouseLeave={clear}
             >
-              <div className="mx-auto flex w-full max-w-6 flex-col-reverse">
+              <div className="ark-col mx-auto flex w-full max-w-6 flex-col-reverse">
                 {series.map((s, si) => {
                   const v = d.values[s.key] ?? 0;
                   if (v === 0) return null;
@@ -389,7 +389,7 @@ export function Meter({
           state reads across the whole bar rather than only where it is filled. */}
       <div className="h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--viz-track)" }}>
         <div
-          className="h-full rounded-full transition-all"
+          className="ark-bar h-full rounded-full transition-all"
           style={{ width: `${Math.max(pct, 1)}%`, background: "var(--viz-fill)" }}
         />
       </div>

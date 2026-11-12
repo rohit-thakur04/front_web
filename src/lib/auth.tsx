@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { api, clearToken, getToken, setToken } from "./api";
+import { api, clearToken, getToken, restoreAdminToken, setToken, stashAdminToken } from "./api";
 import type { MeResponse, User } from "./types";
 
 interface AuthState {
@@ -37,6 +37,13 @@ interface AuthState {
    */
   emailDryRun: boolean;
   wabaDryRun: boolean;
+  /** Set when the subscription has lapsed: "soft" is read-only, "hard" locked. */
+  subscriptionLock: "" | "soft" | "hard";
+  /** True while an admin is logged in as this account. */
+  impersonating: boolean;
+  /** Admin only: become this client until returnToAdmin. */
+  loginAs: (userId: string) => Promise<void>;
+  returnToAdmin: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -46,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [features, setFeatures] = useState<Record<string, boolean> | null>(null);
   const [workflowLimit, setWorkflowLimit] = useState(0);
   const [dryRun, setDryRun] = useState({ email: false, waba: false });
+  const [subscriptionLock, setSubscriptionLock] = useState<"" | "soft" | "hard">("");
+  const [impersonating, setImpersonating] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -66,6 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setFeatures(me.features);
           setWorkflowLimit(me.workflowLimit ?? 0);
           setDryRun({ email: me.emailDryRun ?? false, waba: me.wabaDryRun ?? false });
+          setSubscriptionLock(me.subscriptionLock ?? "");
+          setImpersonating(me.impersonating ?? false);
         }
       } catch {
         clearToken();
@@ -94,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setFeatures(me.features);
         setWorkflowLimit(me.workflowLimit ?? 0);
         setDryRun({ email: me.emailDryRun ?? false, waba: me.wabaDryRun ?? false });
+        setSubscriptionLock(me.subscriptionLock ?? "");
       } catch {
         setFeatures(null);
       }
@@ -103,13 +115,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [router],
   );
 
+  // Full page loads on both sides, so nothing from one account's screens is
+  // left in memory for the other.
+  const loginAs = useCallback(async (userId: string) => {
+    const res = await api<{ token: string }>(`/auth/users/${userId}/impersonate`, { method: "POST" });
+    stashAdminToken();
+    setToken(res.token);
+    window.location.href = "/needs-attention";
+  }, []);
+
+  const returnToAdmin = useCallback(() => {
+    clearToken();
+    window.location.href = restoreAdminToken() ? "/clients" : "/login";
+  }, []);
+
   const logout = useCallback(() => {
+    if (impersonating) {
+      returnToAdmin();
+      return;
+    }
     clearToken();
     setUser(null);
     setFeatures(null);
     setWorkflowLimit(0);
     router.push("/login");
-  }, [router]);
+  }, [router, impersonating, returnToAdmin]);
 
   /*
    * Silent session renewal.
@@ -129,7 +159,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * code paths deciding when a session has ended.
    */
   useEffect(() => {
-    if (!user) return;
+    // A "log in as" session has a fixed two hours; the server won't renew it.
+    if (!user || impersonating) return;
 
     const RENEW_EVERY = 20 * 60 * 1000;
     const timer = setInterval(async () => {
@@ -142,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, RENEW_EVERY);
 
     return () => clearInterval(timer);
-  }, [user]);
+  }, [user, impersonating]);
 
   const hasFeature = useCallback(
     (key: string) => {
@@ -165,8 +196,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       wabaDryRun: dryRun.waba,
       hasFeature,
       workflowLimit,
+      subscriptionLock,
+      impersonating,
+      loginAs,
+      returnToAdmin,
     }),
-    [user, loading, login, logout, features, hasFeature, workflowLimit, dryRun],
+    [user, loading, login, logout, features, hasFeature, workflowLimit, dryRun, subscriptionLock,
+      impersonating, loginAs, returnToAdmin],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

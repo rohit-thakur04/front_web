@@ -2,17 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "@/lib/theme";
+import { useTheme, type ThemeMode } from "@/lib/theme";
 
 interface Props {
   onToggleSidebar: () => void;
 }
 
+const MODES: { mode: ThemeMode; label: string }[] = [
+  { mode: "light", label: "Light" },
+  { mode: "dark", label: "Dark" },
+  { mode: "system", label: "System" },
+];
+
 export function Topbar({ onToggleSidebar }: Props) {
   const { user, logout, isAdmin } = useAuth();
-  const { theme, toggle } = useTheme();
+  const { theme, mode, setMode, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close the user menu on an outside click.
@@ -29,7 +37,7 @@ export function Topbar({ onToggleSidebar }: Props) {
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-[var(--ark-line)] bg-[var(--ark-surface)]/85 px-4 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-[var(--ark-line)] bg-[var(--ark-header)]/85 px-4 backdrop-blur-md">
       <button
         onClick={onToggleSidebar}
         className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
@@ -78,15 +86,19 @@ export function Topbar({ onToggleSidebar }: Props) {
           onClick={() => setMenuOpen((o) => !o)}
           className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-2 transition hover:border-slate-300 hover:bg-slate-50"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-semibold text-white ring-2 ring-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ark-primary)] text-sm font-semibold text-[var(--ark-primary-ink)] ring-2 ring-[var(--ark-surface)]">
             {initial}
           </span>
           <span className="hidden text-sm font-medium sm:block">{user?.name}</span>
-          <Icon.ChevronDown className="text-slate-400" width={16} height={16} />
+          <Icon.ChevronDown
+            className={`text-slate-400 transition-transform duration-200 ${menuOpen ? "rotate-180" : ""}`}
+            width={16}
+            height={16}
+          />
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_32px_-8px_rgba(15,23,42,0.25)]">
+          <div className="ark-pop absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[var(--ark-shadow-overlay)]">
             <div className="border-b border-slate-100 px-4 py-3">
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="truncate text-xs text-slate-500">{user?.email}</p>
@@ -96,6 +108,36 @@ export function Topbar({ onToggleSidebar }: Props) {
                 </span>
               )}
             </div>
+            <div className="border-b border-slate-100 px-4 py-3">
+              <p className="mb-1.5 text-xs text-slate-500">Theme</p>
+              <div role="radiogroup" aria-label="Theme" className="flex rounded-lg bg-slate-100 p-0.5">
+                {MODES.map((m) => (
+                  <button
+                    key={m.mode}
+                    role="radio"
+                    aria-checked={mode === m.mode}
+                    onClick={() => setMode(m.mode)}
+                    className={`flex-1 rounded-md py-1 text-xs font-medium ${
+                      mode === m.mode
+                        ? "bg-[var(--ark-surface)] text-[var(--ark-ink)] shadow-[var(--ark-shadow-rest)]"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                setChangingPassword(true);
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Icon.Shield className="text-slate-400" />
+              Change password
+            </button>
             <button
               onClick={logout}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
@@ -106,6 +148,7 @@ export function Topbar({ onToggleSidebar }: Props) {
           </div>
         )}
       </div>
+      {changingPassword && <ChangePasswordDialog onClose={() => setChangingPassword(false)} />}
     </header>
   );
 }

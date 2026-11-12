@@ -11,10 +11,12 @@ import type {
 } from "@/lib/types";
 import { SMTPManager } from "./SMTPManager";
 import { WabaSetupWizard } from "./WabaSetupWizard";
+import { MetaLeadsCard } from "./MetaLeadsCard";
 
 // Providers with a dedicated flow instead of the generic connect dialog.
 const CUSTOM_SMTP = "custom_smtp";
 const WHATSAPP = "whatsapp";
+const META = "meta";
 
 export function AppStore() {
   /*
@@ -122,8 +124,8 @@ export function AppStore() {
   // Counts only connections that actually work, so the number at the top of the
   // page agrees with the badges underneath it.
   const connectedCount =
-    connections.filter((c) => c.status === "connected" && c.usable !== false).length +
-    (smtpConnected ? 1 : 0);
+    connections.filter((c) => c.provider !== META && c.status === "connected" && c.usable !== false)
+      .length + (smtpConnected ? 1 : 0);
   const brokenCount = connections.filter(
     (c) => c.status === "connected" && c.usable === false,
   ).length;
@@ -196,6 +198,7 @@ export function AppStore() {
             <h3 className="mb-3 text-sm font-semibold text-slate-700">{group.label}</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {group.providers.map((p) => {
+                if (p.key === META) return <MetaLeadsCard key={p.key} provider={p} />;
                 const isSmtp = p.key === CUSTOM_SMTP;
                 const locked = p.key === WHATSAPP && !hasFeature("waba");
                 const conn = byProvider[p.key];

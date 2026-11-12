@@ -22,7 +22,7 @@ function generatePassword(): string {
 }
 
 export default function ClientsPage() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, loginAs } = useAuth();
   const router = useRouter();
 
   const [users, setUsers] = useState<User[]>([]);
@@ -401,6 +401,16 @@ export default function ClientsPage() {
                   <div className="flex items-center justify-end gap-1">
                     <RowActions>
                       <RowAction action="open" label="View details" onClick={() => setViewing(u)} />
+                      {u.role !== "admin" && (
+                        <RowAction
+                          action="login"
+                          label={u.disabled ? "Reactivate to log in as this account" : `Log in as ${u.name}`}
+                          disabled={u.disabled}
+                          onClick={() =>
+                            loginAs(u._id).catch((e) => alert(e instanceof Error ? e.message : "Could not log in as this account"))
+                          }
+                        />
+                      )}
                       <RowAction action="edit" label="Edit account" onClick={() => setEditing(u)} />
                     </RowActions>
                     <ClientRowMenu

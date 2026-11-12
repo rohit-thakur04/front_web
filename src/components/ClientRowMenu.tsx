@@ -72,7 +72,7 @@ export function ClientRowMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
+          className="ark-pop absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
         >
           <MenuItem icon={<Icon.ExternalLink width={15} height={15} />} onClick={run(onView)}>
             View details

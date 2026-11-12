@@ -56,17 +56,17 @@ export function Sidebar({ open, onNavigate }: Props) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-[var(--ark-line)] bg-[var(--ark-surface)] transition-transform duration-200 lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-[var(--ark-nav-line)] bg-[var(--ark-nav-bg)] transition-transform duration-300 ease-[var(--ark-ease)] lg:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
       {/* Brand. A flat monogram rather than a gradient tile: this product is a
           tool, and the chrome should not be the most decorated thing in it. */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-[var(--ark-line)] px-4">
-        <span className="flex h-7 w-7 items-center justify-center rounded-[var(--ark-r-sm)] bg-[var(--ark-ink)] text-[13px] font-bold text-[var(--ark-ink-inverse)]">
+      <div className="flex h-14 items-center gap-2.5 border-b border-[var(--ark-nav-line)] px-4">
+        <span className="flex h-7 w-7 items-center justify-center rounded-[var(--ark-r-sm)] bg-[var(--ark-primary)] text-[13px] font-bold text-[var(--ark-primary-ink)]">
           A
         </span>
-        <span className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--ark-ink)]">
+        <span className="font-[family-name:var(--font-display)] text-[16px] font-semibold tracking-[-0.01em] text-[var(--ark-nav-ink)]">
           Arkquen
         </span>
       </div>
@@ -77,11 +77,11 @@ export function Sidebar({ open, onNavigate }: Props) {
       <div className="px-3 pt-3">
         <button
           onClick={() => window.dispatchEvent(new Event("arkquen:open-command"))}
-          className="flex w-full items-center gap-2 rounded-[var(--ark-r-md)] border border-[var(--ark-line)] bg-[var(--ark-surface-2)] px-2.5 py-1.5 text-left text-[13px] text-[var(--ark-ink-muted)] transition-colors hover:border-[var(--ark-line-strong)] hover:text-[var(--ark-ink-3)]"
+          className="flex w-full items-center gap-2 rounded-[var(--ark-r-md)] border border-[var(--ark-nav-line)] bg-[var(--ark-nav-hover)] px-2.5 py-1.5 text-left text-[13px] text-[var(--ark-nav-muted)] transition-colors hover:border-[var(--ark-nav-muted)] hover:text-[var(--ark-nav-ink)]"
         >
           <span aria-hidden>⌕</span>
           <span className="flex-1">Search</span>
-          <kbd className="rounded-[var(--ark-r-sm)] border border-[var(--ark-line)] bg-[var(--ark-surface)] px-1 py-0.5 text-[10px]">
+          <kbd className="rounded-[var(--ark-r-sm)] border border-[var(--ark-nav-line)] px-1 py-0.5 text-[10px]">
             ⌘K
           </kbd>
         </button>
@@ -103,10 +103,10 @@ export function Sidebar({ open, onNavigate }: Props) {
                 /* A rule carrying its label, so the heading reads as a divider
                    rather than as another nav entry in small caps. */
                 <div className="mb-1.5 flex items-center gap-2 px-2">
-                  <span className="text-[10px] font-semibold tracking-[0.1em] text-[var(--ark-ink-muted)] uppercase">
+                  <span className="text-[10px] font-semibold tracking-[0.1em] text-[var(--ark-nav-muted)] uppercase">
                     {group.heading}
                   </span>
-                  <span className="h-px flex-1 bg-[var(--ark-line)]" />
+                  <span className="h-px flex-1 bg-[var(--ark-nav-line)]" />
                 </div>
               )}
 
@@ -120,10 +120,10 @@ export function Sidebar({ open, onNavigate }: Props) {
                       href={item.href}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={`group relative flex items-center gap-2.5 rounded-[var(--ark-r-md)] py-1.5 pr-2 pl-3 text-[13px] transition-colors ${
+                      className={`group relative flex items-center gap-2.5 rounded-[var(--ark-r-md)] py-1.5 pr-2 pl-3 text-[13px] transition-colors duration-200 ${
                         active
-                          ? "bg-[var(--ark-surface-2)] font-semibold text-[var(--ark-ink)]"
-                          : "font-medium text-[var(--ark-ink-3)] hover:bg-[var(--ark-surface-2)] hover:text-[var(--ark-ink)]"
+                          ? "bg-[var(--ark-nav-active)] font-semibold text-[var(--ark-nav-ink)]"
+                          : "font-medium text-[var(--ark-nav-ink-2)] hover:bg-[var(--ark-nav-hover)] hover:text-[var(--ark-nav-ink)]"
                       }`}
                     >
                       {/* The rail. Carries the accent so the row itself does
@@ -131,16 +131,18 @@ export function Sidebar({ open, onNavigate }: Props) {
                           making position unmistakable at a glance. */}
                       <span
                         aria-hidden
-                        className={`absolute inset-y-1 left-0 w-[2px] rounded-full transition-colors ${
-                          active ? "bg-[var(--ark-primary)]" : "bg-transparent"
+                        className={`absolute inset-y-1 left-0 w-[3px] rounded-full bg-[var(--ark-primary)] transition-transform duration-300 ease-[var(--ark-ease)] ${
+                          active ? "scale-y-100" : "scale-y-0"
                         }`}
                       />
                       <IconEl
                         width={15}
                         height={15}
-                        className={
-                          active ? "text-[var(--ark-primary)]" : "text-[var(--ark-ink-muted)]"
-                        }
+                        className={`transition-[color,transform] duration-200 group-hover:translate-x-0.5 ${
+                          active
+                            ? "text-[var(--ark-primary)]"
+                            : "text-[var(--ark-nav-muted)] group-hover:text-[var(--ark-nav-ink)]"
+                        }`}
                       />
                       {item.label}
                     </Link>
@@ -152,7 +154,7 @@ export function Sidebar({ open, onNavigate }: Props) {
         })}
       </nav>
 
-      <div className="border-t border-[var(--ark-line)] px-4 py-2.5 text-[11px] text-[var(--ark-ink-muted)]">
+      <div className="border-t border-[var(--ark-nav-line)] px-4 py-2.5 text-[11px] text-[var(--ark-nav-muted)]">
         Arkquen
       </div>
     </aside>

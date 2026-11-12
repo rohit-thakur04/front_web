@@ -9,7 +9,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PromptProvider } from "@/components/PromptProvider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, subscriptionLock, impersonating, returnToAdmin } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -50,6 +50,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Content is inset by the sidebar width on large screens. */}
       <div className="lg:pl-[232px]">
         <Topbar onToggleSidebar={() => setSidebarOpen((o) => !o)} />
+        {impersonating && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-amber-100 px-4 py-2 text-sm text-amber-900">
+            <span>
+              You are logged in as <strong>{user?.name}</strong> ({user?.email}). Everything you do happens in their account.
+            </span>
+            <button onClick={returnToAdmin} className="ml-auto rounded-md bg-amber-900 px-3 py-1 text-xs font-medium text-amber-50 hover:bg-amber-800">
+              Return to admin
+            </button>
+          </div>
+        )}
+        {subscriptionLock && (
+          <p role="alert" className="bg-rose-50 px-4 py-2.5 text-sm text-rose-800">
+            {subscriptionLock === "soft"
+              ? "Your subscription is past due, so your account is read-only. Contact us to restore it."
+              : "Your subscription is inactive, so your account is locked. Contact us to restore access."}
+          </p>
+        )}
         <main>{children}</main>
       </div>
     </div>

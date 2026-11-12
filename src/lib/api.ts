@@ -38,6 +38,22 @@ export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
+// The admin's own token, put aside while they are logged in as a client.
+const ADMIN_TOKEN_KEY = "crm.adminToken";
+
+export function stashAdminToken() {
+  const t = getToken();
+  if (t) window.localStorage.setItem(ADMIN_TOKEN_KEY, t);
+}
+
+/** Puts the admin's own token back. False when there was none. */
+export function restoreAdminToken(): boolean {
+  const t = window.localStorage.getItem(ADMIN_TOKEN_KEY);
+  window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+  if (t) setToken(t);
+  return !!t;
+}
+
 export class ApiError extends Error {
   status: number;
   /**
@@ -87,7 +103,10 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     // The token is missing, expired, or its account is gone. Drop it and bounce
     // to login rather than letting every subsequent call fail silently.
     clearToken();
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    // A "log in as" session that ran out goes back to the admin, not to login.
+    if (restoreAdminToken()) {
+      window.location.href = "/clients";
+    } else if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
     throw new ApiError(401, "Your session has expired. Please sign in again.");

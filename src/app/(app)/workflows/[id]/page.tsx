@@ -8,6 +8,7 @@ import type {
   CatalogItem,
   EmailTemplate,
   Form,
+  MetaPageForms,
   Pipeline,
   PublishProblem,
   Stage,
@@ -925,6 +926,17 @@ function TriggerConfig({
         </div>
       )}
 
+      {item.key === "meta_lead_form" && (
+        <MetaLeadOptions
+          pageId={str("pageId")}
+          formId={str("metaFormId")}
+          stageId={str("stageId")}
+          pipelines={pipelines}
+          stages={stages}
+          onConfig={onConfig}
+        />
+      )}
+
       {item.key === "webhook_in" && (
         <div className="mb-4 space-y-3">
           <WebhookAddress url={webhookUrl} />
@@ -940,6 +952,19 @@ function TriggerConfig({
               onChange={(v) => onConfig({ stageId: v })}
             />
           </TriggerField>
+          <TriggerField
+            label="Thank-you page (for website forms)"
+            hint="Where a visitor goes after sending a form on your own landing page. Leave blank for a simple built-in thank-you page."
+          >
+            <input
+              className="input"
+              type="url"
+              value={str("redirectUrl")}
+              placeholder="https://yoursite.com/thank-you"
+              onChange={(e) => onConfig({ redirectUrl: e.target.value })}
+            />
+          </TriggerField>
+          {webhookUrl && <LandingFormSnippet url={webhookUrl} />}
         </div>
       )}
 
@@ -957,6 +982,111 @@ function TriggerConfig({
           Remove trigger
         </button>
       </div>
+    </div>
+  );
+}
+
+// The Meta Lead Form trigger's options, read from the client's connected Pages.
+function MetaLeadOptions({
+  pageId,
+  formId,
+  stageId,
+  pipelines,
+  stages,
+  onConfig,
+}: {
+  pageId: string;
+  formId: string;
+  stageId: string;
+  pipelines: Pipeline[];
+  stages: Stage[];
+  onConfig: (patch: Record<string, unknown>) => void;
+}) {
+  const [pages, setPages] = useState<MetaPageForms[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    api<MetaPageForms[]>("/meta/forms")
+      .then((p) => {
+        if (live) setPages(p);
+      })
+      .catch((e) => {
+        if (live) setError(e instanceof Error ? e.message : "Could not load your Pages");
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (error) {
+    return <p className="mb-4 rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700">{error}</p>;
+  }
+  if (!pages) return <p className="mb-4 text-sm text-slate-500">Loading your Pages…</p>;
+  if (pages.length === 0) {
+    return (
+      <p className="mb-4 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        No Facebook Page is connected, so this workflow will not run.{" "}
+        <Link href="/settings/app-store" className="underline">
+          Connect one in the App Store
+        </Link>
+        .
+      </p>
+    );
+  }
+
+  const page = pages.find((p) => p.pageId === pageId);
+  return (
+    <div className="mb-4 space-y-3">
+      <TriggerField label="Which Page?" hint="Leave blank to run for every connected Page.">
+        <select
+          className="input"
+          value={pageId}
+          // A form belongs to one Page, so changing the Page clears it.
+          onChange={(e) => onConfig({ pageId: e.target.value, metaFormId: "" })}
+        >
+          <option value="">Any Page</option>
+          {pages.map((p) => (
+            <option key={p.pageId} value={p.pageId}>
+              {p.pageName}
+            </option>
+          ))}
+        </select>
+      </TriggerField>
+      {page && (
+        <TriggerField label="Which form?" hint="Leave blank to run for every form on this Page.">
+          <select
+            className="input"
+            value={formId}
+            onChange={(e) => onConfig({ metaFormId: e.target.value })}
+          >
+            <option value="">Any form</option>
+            {page.forms.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+                {f.status !== "ACTIVE" ? ` (${f.status.toLowerCase()})` : ""}
+              </option>
+            ))}
+          </select>
+        </TriggerField>
+      )}
+      {page?.error && (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+          Could not list this Page&apos;s forms: {page.error}
+        </p>
+      )}
+      <TriggerField
+        label="Where should new contacts land?"
+        hint="Used only when the lead is not already on file."
+      >
+        <StagePicker
+          value={stageId}
+          pipelines={pipelines}
+          stages={stages}
+          anyLabel="First stage of the first pipeline"
+          onChange={(v) => onConfig({ stageId: v })}
+        />
+      </TriggerField>
     </div>
   );
 }
@@ -1134,13 +1264,62 @@ function WebhookAddress({ url }: { url?: string }) {
         </button>
       </div>
       <p className="mt-1.5 text-xs text-slate-500">
-        POST JSON here with any of <code>name</code>, <code>email</code>,{" "}
-        <code>phone</code>, <code>value</code>, <code>tags</code>. A contact
+        POST JSON here, or point a form on your own website at it. It reads{" "}
+        <code>name</code>, <code>email</code>, <code>phone</code>, <code>value</code>{" "}
+        and <code>tags</code>; any other field is saved on the contact. A contact
         already on file is matched by email or phone rather than duplicated.
       </p>
       <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
-        Treat this like a password — anyone with it can add contacts to your
-        account. It only works once the workflow is published.
+        Anyone with this address can add contacts to your account. In a website
+        form it is public, like any contact form, so spam is held back by a
+        hidden trap field and a per-visitor limit. It only works once the
+        workflow is published.
+      </p>
+    </div>
+  );
+}
+
+// A ready-made form for a client's own landing page, posting to the webhook.
+function LandingFormSnippet({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const snippet = `<form action="${url}" method="POST">
+  <input name="name" placeholder="Your name" required>
+  <input name="email" type="email" placeholder="Email">
+  <input name="phone" type="tel" placeholder="Phone">
+  <textarea name="message" placeholder="How can we help?"></textarea>
+  <!-- Leave this hidden and empty: it catches spam bots. -->
+  <input name="_gotcha" style="display:none" tabindex="-1" autocomplete="off">
+  <button type="submit">Send</button>
+</form>`;
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <label className="text-sm font-medium">Form for your website</label>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(snippet);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch {
+              setCopied(false);
+            }
+          }}
+          className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-50"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="max-h-48 overflow-auto rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap break-all text-slate-700">
+        {snippet}
+      </pre>
+      <p className="mt-1.5 text-xs text-slate-500">
+        Paste it into your page, or point your existing form&apos;s action at the
+        address above with <code>method=&quot;POST&quot;</code>. Add any fields you
+        like; campaign links with <code>utm_source</code> are recorded too when
+        passed as hidden fields.
       </p>
     </div>
   );

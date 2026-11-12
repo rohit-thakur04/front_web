@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
@@ -117,9 +118,16 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* There is no public signup: accounts are created by an admin. */}
-          <p className="mt-8 text-center text-xs text-slate-500">
-            Accounts are created by your administrator.
+          <p className="mt-4 text-center text-sm">
+            <Link href="/forgot-password" className="text-slate-600 underline">
+              Forgot password?
+            </Link>
+          </p>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            New to Arkquen?{" "}
+            <Link href="/pricing" className="underline">
+              See plans
+            </Link>
           </p>
         </div>
       </div>

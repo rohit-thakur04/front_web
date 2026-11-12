@@ -172,7 +172,7 @@ function UsageBar({ label, used, remaining }: { label: string; used: number; rem
       {!unlimited && (
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
           <div
-            className={`h-full rounded-full ${pct >= 90 ? "bg-rose-500" : pct >= 75 ? "bg-amber-500" : "bg-blue-600"}`}
+            className={`ark-bar h-full rounded-full ${pct >= 90 ? "bg-rose-500" : pct >= 75 ? "bg-amber-500" : "bg-blue-600"}`}
             style={{ width: `${pct}%` }}
           />
         </div>

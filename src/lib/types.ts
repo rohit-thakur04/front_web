@@ -72,6 +72,10 @@ export function roleLevelLabel(level: number): string {
 export interface MeResponse {
   user: User;
   features: Record<string, boolean> | null;
+  /** "soft" (read-only) or "hard" when the subscription has lapsed. */
+  subscriptionLock?: "" | "soft" | "hard";
+  /** True when an admin is signed in as this account. */
+  impersonating?: boolean;
   // How many workflows this tenant may create. 0 means unlimited. Resolved
   // server-side, so a staff account receives its client's allowance.
   workflowLimit: number;
@@ -366,6 +370,53 @@ export interface IntegrationProvider {
    */
   testable?: boolean;
   fields: IntegrationField[];
+}
+
+export interface PaymentOrder {
+  _id: string;
+  providerOrderId: string;
+  email: string;
+  name: string;
+  phone: string;
+  gstin?: string;
+  planName: string;
+  cycleName: string;
+  amountMinor: number;
+  status: "pending" | "paid" | "provisioned" | "failed" | "abandoned" | "refunded" | "flagged";
+  note?: string;
+  paidAt?: string;
+  welcomeSentAt?: string;
+  createdAt: string;
+}
+
+export interface MetaPage {
+  _id: string;
+  pageId: string;
+  pageName: string;
+  connectedAt: string;
+}
+
+export interface MetaLead {
+  _id: string;
+  leadgenId: string;
+  pageId: string;
+  formName?: string;
+  status: "pending" | "done" | "failed" | "rejected";
+  error?: string;
+  createdAt: string;
+}
+
+export interface MetaStatus {
+  configured: boolean;
+  pages: MetaPage[];
+  recent: MetaLead[];
+}
+
+export interface MetaPageForms {
+  pageId: string;
+  pageName: string;
+  error?: string;
+  forms: { id: string; name: string; status: string }[];
 }
 
 export interface IntegrationGroup {

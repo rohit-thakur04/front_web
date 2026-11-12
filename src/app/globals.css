@@ -1,8 +1,31 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
+}
+
+/*
+  The Navy / Cream / Coral identity, applied at the palette.
+
+  Every screen is written in Tailwind's slate and white, so re-stepping those
+  two here — cream at the light end, navy at the dark — recolours all of them
+  without editing one. Light-theme values only; dark mode keeps its remaps below.
+*/
+@theme {
+  --color-white: #fffdf8;
+  --color-slate-50: #f7f3ea;
+  --color-slate-100: #f1ece1;
+  --color-slate-200: #e8e2d8;
+  --color-slate-300: #d6cdbe;
+  --color-slate-400: #9aa1ab;
+  --color-slate-500: #6f7887;
+  --color-slate-600: #556074;
+  --color-slate-700: #3e4b60;
+  --color-slate-800: #263449;
+  --color-slate-900: #172b4d;
+  --color-slate-950: #10213a;
 }
 
 /*
@@ -21,13 +44,13 @@
   all day, often on a cheap Android phone, to make sure no enquiry is dropped.
   Dense, fast and legible beats spacious and decorative.
 
-  1. WARM NEUTRALS, not cool slate. The entire inherited palette is blue-grey.
-     A warm grey reads as paper and ink rather than as dashboard chrome, and it
-     is the single change that most stops a screenshot looking familiar.
+  1. CREAM AND NAVY, not cool slate. Cream surfaces read as paper, navy ink
+     and chrome as structure; the dark theme is the same navy with the lights
+     off rather than a generic blue-black.
 
-  2. TEAL PRIMARY, not blue. Blue is the inherited accent and the default of
-     the category. Teal is distinguishable at a glance, holds up on both
-     themes, and leaves blue free to mean nothing at all.
+  2. CORAL PRIMARY, not blue. Blue is the inherited accent and the default of
+     the category. Coral marks actions and key figures and nothing else, with
+     navy labels on it for contrast.
 
   3. TIGHTER RADII. 6px, not 12px. Rounded cards are the house style of the
      thing being differentiated from; a squarer surface reads as a tool.
@@ -39,31 +62,52 @@
   Every value is a variable so a screen can never invent its own.
 */
 :root {
-  /* --- Surfaces, warm-neutral ------------------------------------------ */
-  --ark-bg: #f7f6f3;
-  --ark-surface: #ffffff;
-  --ark-surface-2: #f2f1ed;
-  --ark-surface-3: #e9e7e1;
-  --ark-overlay: #ffffff;
+  /* --- Surfaces: cream -------------------------------------------------- */
+  --ark-bg: #f7f3ea;
+  --ark-surface: #fffdf8;
+  --ark-surface-2: #f1ece1;
+  --ark-surface-3: #e8e2d8;
+  --ark-overlay: #fffdf8;
+  --ark-header: #fffdf8;
 
-  /* --- Ink -------------------------------------------------------------- */
-  --ark-ink: #1a1917;
-  --ark-ink-2: #46443f;
-  --ark-ink-3: #6b6760;
-  --ark-ink-muted: #918c83;
-  --ark-ink-inverse: #fbfaf8;
+  /* --- Ink: navy -------------------------------------------------------- */
+  --ark-ink: #263449;
+  --ark-ink-2: #3e4b60;
+  /* Darker than the brief's #7B8491, which is 3.4:1 on cream — too faint for
+     the small text this colour carries. The brief's value is the muted step. */
+  --ark-ink-3: #5f6b7c;
+  --ark-ink-muted: #7b8491;
+  --ark-ink-inverse: #fffdf8;
+  --ark-navy: #172b4d;
+  --ark-navy-deep: #10213a;
 
   /* --- Lines ------------------------------------------------------------ */
-  --ark-line: #e2e0d9;
-  --ark-line-strong: #cfccc2;
+  --ark-line: #e8e2d8;
+  --ark-line-strong: #d6cdbe;
 
-  /* --- Primary: teal ---------------------------------------------------- */
-  --ark-primary: #0f766e;
-  --ark-primary-hover: #115e58;
-  --ark-primary-ink: #ffffff;
-  --ark-primary-soft: #d8f0ed;
-  --ark-primary-soft-ink: #0b544e;
-  --ark-focus: rgba(15, 118, 110, 0.28);
+  /* --- Primary: coral ---------------------------------------------------
+     Labels on coral are deep navy, not white: white on #E98270 is 2.6:1 and
+     fails, navy is 6:1. */
+  --ark-primary: #e98270;
+  --ark-primary-hover: #e06c58;
+  --ark-primary-ink: #10213a;
+  --ark-primary-soft: #fbe4de;
+  --ark-primary-soft-ink: #9c3f2c;
+  --ark-focus: rgba(233, 130, 112, 0.35);
+
+  /* --- Sidebar: navy in both themes ------------------------------------ */
+  --ark-nav-bg: #172b4d;
+  --ark-nav-ink: #f7f3ea;
+  --ark-nav-ink-2: #c4ccd8;
+  --ark-nav-muted: #8e9aae;
+  --ark-nav-hover: rgba(247, 243, 234, 0.07);
+  --ark-nav-active: rgba(233, 130, 112, 0.16);
+  --ark-nav-line: rgba(247, 243, 234, 0.1);
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ark-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ark-fast: 180ms;
+  --ark-enter: 320ms;
 
   /* --- Semantic --------------------------------------------------------- */
   --ark-ok: #10704a;
@@ -78,9 +122,9 @@
   --ark-danger-soft: #fbddd9;
   --ark-danger-ink: #8a1b13;
 
-  --ark-info: #46443f;
-  --ark-info-soft: #eceae4;
-  --ark-info-ink: #46443f;
+  --ark-info: #3e4b60;
+  --ark-info-soft: #ebe6db;
+  --ark-info-ink: #3e4b60;
 
   /* --- Radius: squarer than the category default ----------------------- */
   --ark-r-sm: 4px;
@@ -89,8 +133,9 @@
   --ark-r-full: 9999px;
 
   /* --- Elevation: resting and overlay, nothing in between -------------- */
-  --ark-shadow-rest: 0 1px 0 rgba(26, 25, 23, 0.04);
-  --ark-shadow-overlay: 0 16px 40px -12px rgba(26, 25, 23, 0.28);
+  --ark-shadow-rest: 0 1px 2px rgba(16, 33, 58, 0.05);
+  --ark-shadow-hover: 0 10px 28px -12px rgba(16, 33, 58, 0.22);
+  --ark-shadow-overlay: 0 18px 44px -12px rgba(16, 33, 58, 0.3);
 
   /* --- Row rhythm. Dense on purpose: these tables are read, not admired. */
   --ark-row-h: 38px;
@@ -98,30 +143,32 @@
 }
 
 html.dark {
-  /* Warm-neutral darks rather than the usual blue-black, so the theme is
-     recognisably the same product with the lights off. */
-  --ark-bg: #16150f;
-  --ark-surface: #1e1d17;
-  --ark-surface-2: #262419;
-  --ark-surface-3: #332f22;
-  --ark-overlay: #24231c;
+  /* Deep navy, so the theme is the same brand with the lights off. */
+  --ark-bg: #0b1424;
+  --ark-surface: #172740;
+  --ark-surface-2: #20334d;
+  --ark-surface-3: #2c3d55;
+  --ark-overlay: #20334d;
+  --ark-header: #101d32;
 
-  --ark-ink: #f5f3ec;
-  --ark-ink-2: #ddd9cd;
-  --ark-ink-3: #b5b0a2;
-  --ark-ink-muted: #8c8779;
-  --ark-ink-inverse: #16150f;
+  --ark-ink: #f7f3ea;
+  --ark-ink-2: #dde2ea;
+  --ark-ink-3: #a7b2c2;
+  --ark-ink-muted: #8391a5;
+  --ark-ink-inverse: #0b1424;
 
-  --ark-line: #332f22;
-  --ark-line-strong: #46412f;
+  --ark-line: #2c3d55;
+  --ark-line-strong: #3b4f6b;
 
-  /* Lifted, because the light-theme teal goes muddy on a dark surface. */
-  --ark-primary: #2dd4bf;
-  --ark-primary-hover: #5eead4;
-  --ark-primary-ink: #0b2e2a;
-  --ark-primary-soft: rgba(45, 212, 191, 0.16);
-  --ark-primary-soft-ink: #7fe8db;
-  --ark-focus: rgba(45, 212, 191, 0.32);
+  --ark-primary: #e98270;
+  --ark-primary-hover: #f09a8a;
+  --ark-primary-ink: #10213a;
+  --ark-primary-soft: rgba(233, 130, 112, 0.16);
+  --ark-primary-soft-ink: #f4b5a7;
+  --ark-focus: rgba(233, 130, 112, 0.4);
+
+  --ark-nav-bg: #101d32;
+  --ark-nav-line: rgba(247, 243, 234, 0.08);
 
   --ark-ok: #34d399;
   --ark-ok-soft: rgba(52, 211, 153, 0.16);
@@ -135,16 +182,17 @@ html.dark {
   --ark-danger-soft: rgba(251, 113, 133, 0.16);
   --ark-danger-ink: #fda4af;
 
-  --ark-info: #b5b0a2;
-  --ark-info-soft: rgba(181, 176, 162, 0.14);
-  --ark-info-ink: #ddd9cd;
+  --ark-info: #a7b2c2;
+  --ark-info-soft: rgba(167, 178, 194, 0.14);
+  --ark-info-ink: #dde2ea;
 
   --ark-shadow-rest: 0 1px 0 rgba(0, 0, 0, 0.3);
-  --ark-shadow-overlay: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+  --ark-shadow-hover: 0 12px 30px -12px rgba(0, 0, 0, 0.55);
+  --ark-shadow-overlay: 0 18px 44px -12px rgba(0, 0, 0, 0.65);
 }
 
 body {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
   /* From the tokens, so the page behind the shell is the same warm neutral as
      the shell itself rather than the cool slate it was. */
   background-color: var(--ark-bg);
@@ -191,7 +239,7 @@ body {
   border: 1px solid var(--color-slate-300);
   padding: --spacing(2) --spacing(3);
   font-size: var(--text-sm);
-  background-color: #fff;
+  background-color: var(--ark-surface);
   outline: none;
   transition:
     border-color 150ms ease,
@@ -274,18 +322,25 @@ body {
   [role="button"],
   summary {
     transition:
-      background-color 120ms ease,
-      border-color 120ms ease,
-      color 120ms ease,
-      box-shadow 120ms ease,
-      opacity 120ms ease;
+      background-color var(--ark-fast) ease,
+      border-color var(--ark-fast) ease,
+      color var(--ark-fast) ease,
+      box-shadow var(--ark-fast) ease,
+      opacity var(--ark-fast) ease,
+      transform var(--ark-fast) var(--ark-ease);
   }
 
-  /* A press is acknowledged. Tiny on purpose: enough to feel the click land,
-     not enough to read as the layout moving. */
+  /* A press is acknowledged: the control gives a little under the finger. */
   button:not(:disabled):active,
   [role="button"]:not(:disabled):active {
-    transform: translateY(0.5px);
+    transform: scale(0.97);
+  }
+
+  /* Page titles in the display serif; everything else stays in Inter. */
+  h1 {
+    font-family: var(--font-display), Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   /* Text selection in the product's own accent rather than the browser's. */
@@ -438,7 +493,7 @@ html.dark body {
 
 /* Surfaces */
 html.dark .bg-white { background-color: var(--ark-surface) !important; }
-html.dark .bg-white\/80 { background-color: rgba(23, 31, 46, 0.8) !important; }
+html.dark .bg-white\/80 { background-color: rgba(23, 39, 64, 0.8) !important; }
 html.dark .bg-slate-50 { background-color: var(--ark-bg) !important; }
 html.dark .bg-slate-100 { background-color: var(--ark-surface-2) !important; }
 html.dark .bg-slate-200 { background-color: var(--ark-surface-3) !important; }
@@ -514,8 +569,12 @@ html.dark .text-blue-800 { color: #93c5fd !important; }
 html.dark .text-emerald-900 { color: #6ee7b7 !important; }
 html.dark .text-violet-700 { color: #c4b5fd !important; }
 
-/* Buttons/marks authored as slate-900 stay high-contrast on dark. */
-html.dark .bg-slate-900 { background-color: var(--ark-primary) !important; }
+/* Buttons/marks authored as slate-900 stay high-contrast on dark — coral, so
+   their white label turns navy with them. */
+html.dark .bg-slate-900 {
+  background-color: var(--ark-primary) !important;
+  color: var(--ark-primary-ink) !important;
+}
 html.dark .hover\:bg-slate-800:hover { background-color: var(--ark-primary-hover) !important; }
 
 /* Native form controls default to white — force them dark. */
@@ -623,6 +682,65 @@ html.dark .bg-black\/40 { background-color: rgba(0, 0, 0, 0.6) !important; }
 /* The active nav pill and progress fills follow the same accent. */
 .bg-blue-600 {
   color: var(--ark-primary-ink) !important;
+}
+
+/*
+  --- Motion ---------------------------------------------------------------
+
+  CSS only, and each animation runs once, when its element mounts — a chart
+  re-rendered with new data does not replay. The reduced-motion rule in the
+  base layer collapses every one of these to nothing.
+*/
+@keyframes ark-fade { from { opacity: 0; } }
+@keyframes ark-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes ark-zoom { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
+@keyframes ark-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+@keyframes ark-grow-x { from { transform: scaleX(0); } }
+@keyframes ark-grow-y { from { transform: scaleY(0); } }
+@keyframes ark-reveal { from { clip-path: inset(0 100% 0 0); } }
+
+/* Filled actions lift a touch on hover and give under the press. Scoped to
+   the filled styles so icon buttons and table rows stay still. */
+:is(button, a):is(.bg-blue-600, .bg-blue-700, .bg-slate-900, .bg-\[var\(--ark-primary\)\]):not(:disabled):not([role="switch"]):hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 16px -8px rgba(233, 130, 112, 0.6);
+}
+:is(button, a):is(.bg-blue-600, .bg-blue-700, .bg-slate-900, .bg-\[var\(--ark-primary\)\]):not(:disabled):not([role="switch"]):active {
+  transform: scale(0.98);
+}
+
+/* Each screen settles in. No fill-mode on purpose: a transform left applied
+   after the animation would make the page the containing block for every
+   fixed-position dialog inside it. */
+main > * {
+  animation: ark-rise var(--ark-enter) var(--ark-ease);
+}
+
+/* Every dialog in the app is a fixed scrim with the panel as its child. */
+.fixed.inset-0:is(.bg-black\/20, .bg-black\/30, .bg-black\/40) {
+  animation: ark-fade 200ms ease-out;
+}
+.fixed.inset-0:is(.bg-black\/30, .bg-black\/40) > * {
+  animation: ark-zoom 260ms var(--ark-ease);
+}
+
+/* Dropdown menus. */
+.ark-pop {
+  transform-origin: top right;
+  animation: ark-pop var(--ark-fast) var(--ark-ease);
+}
+
+/* Charts draw in once: bars grow from their baseline, lines reveal left to right. */
+.ark-bar {
+  transform-origin: left;
+  animation: ark-grow-x 700ms var(--ark-ease);
+}
+.ark-col {
+  transform-origin: bottom;
+  animation: ark-grow-y 600ms var(--ark-ease);
+}
+.ark-draw {
+  animation: ark-reveal 900ms var(--ark-ease);
 }
 
 /* --- Chart tokens -------------------------------------------------------

@@ -83,7 +83,7 @@ export function FilterButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+        <div className="ark-pop absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Filter contacts</h3>
             <button
