@@ -175,6 +175,14 @@ export const NAV_GROUPS: NavGroup[] = [
         hint: "Triggers, conditions and actions",
         keywords: ["workflow", "automation", "trigger", "builder", "flow"],
       },
+      {
+        href: "/logs",
+        label: "All Logs",
+        icon: "Clock",
+        feature: "workflows",
+        hint: "Workflow runs, emails and WhatsApp messages",
+        keywords: ["logs", "runs", "executions", "history", "waiting", "failed", "audit"],
+      },
     ],
   },
   {

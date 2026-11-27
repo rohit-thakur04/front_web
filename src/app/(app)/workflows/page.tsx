@@ -128,6 +128,27 @@ export default function WorkflowsPage() {
     return wf.name.toLowerCase().includes(q);
   });
 
+  async function copy(wf: Workflow) {
+    try {
+      const c = await api<Workflow>(`/workflows/${wf._id}/clone`, { method: "POST" });
+      router.push(`/workflows/${c._id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not copy the workflow");
+    }
+  }
+
+  // Import a file made with Export in the builder. It arrives as a draft.
+  async function importFile(file: File) {
+    setError("");
+    try {
+      const data = JSON.parse(await file.text());
+      const wf = await api<Workflow>("/workflows/import", { method: "POST", body: data });
+      router.push(`/workflows/${wf._id}`);
+    } catch (e) {
+      setError(e instanceof SyntaxError ? "That file is not a workflow export" : e instanceof Error ? e.message : "Could not import");
+    }
+  }
+
   async function remove(wf: Workflow) {
     if (!window.confirm(`Delete "${wf.name}"?`)) return;
     try {
@@ -165,6 +186,22 @@ export default function WorkflowsPage() {
                 {workflows.length} / {workflowLimit} used
               </span>
             )}
+            <label
+              className={`cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 ${atLimit ? "pointer-events-none opacity-50" : ""}`}
+              title="Import a workflow exported from the builder"
+            >
+              Import
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) importFile(f);
+                }}
+              />
+            </label>
             <button
               onClick={() => setPicking(true)}
               disabled={creating || atLimit}
@@ -289,6 +326,7 @@ export default function WorkflowsPage() {
                   <td className="px-4 py-3">
                     <RowActions>
                       <RowAction action="edit" label="Edit" href={`/workflows/${wf._id}`} />
+                      <RowAction action="copy" label="Make a copy" disabled={atLimit} onClick={() => copy(wf)} />
                       <RowAction action="delete" label="Delete" onClick={() => remove(wf)} />
                     </RowActions>
                   </td>

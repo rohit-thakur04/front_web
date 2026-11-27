@@ -30,6 +30,9 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
       await load();
     }
     run();
+    // Live usage: today's and this hour's counts move as mail goes out.
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
   }, []);
 
   async function remove(conn: SMTPConnection) {
@@ -70,9 +73,13 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Test send failed");
     }
+    // The result decides whether this sender may be in rotation.
+    await load();
   }
 
   const connected = conns.some((c) => c.isDefault);
+  // Senders on unrelated domains hurt inbox placement for all of them.
+  const domains = Array.from(new Set(conns.filter((c) => !c.paused).map((c) => rootDomain(c.fromEmail)).filter(Boolean)));
 
   return (
     <div>
@@ -134,8 +141,25 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
                       {conn.fromEmail}
                     </p>
                     <p className="text-xs text-slate-400">
-                      Limits: {conn.dailyLimit}/day · {conn.hourlyLimit}/hr · burst {conn.maxBurst}
+                      Limits: {conn.dailyLimit || "no"}/day · {conn.hourlyLimit || "no"}/hr · burst {conn.maxBurst}
                     </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Sent today {conn.sentToday ?? 0}
+                      {conn.dailyLimit ? ` of ${conn.dailyLimit}` : ""} · this hour {conn.sentThisHour ?? 0}
+                      {conn.hourlyLimit ? ` of ${conn.hourlyLimit}` : ""}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] font-medium">
+                      <span className={`rounded px-1.5 py-0.5 ${conn.paused ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}>
+                        {conn.paused ? "Paused" : `Active · ${conn.sharePct ?? 0}% of traffic`}
+                      </span>
+                      {conn.lastTestOk === true && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">Last test passed</span>}
+                      {conn.lastTestOk === false && (
+                        <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700" title={conn.lastTestError}>
+                          Last test failed: not used until a test passes
+                        </span>
+                      )}
+                      {conn.lastTestOk == null && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">Not tested yet</span>}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {!conn.isDefault && (
@@ -179,6 +203,25 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
         </button>
       </div>
 
+      {domains.length > 1 && (
+        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Your active senders use different domains ({domains.join(", ")}). Rotating between unrelated domains makes
+          inbox providers trust all of them less. Keep one domain per pool where you can.
+        </p>
+      )}
+
+      {conns.length > 1 && (
+        <TrafficSplit
+          key={conns.map((c) => `${c._id}:${c.sharePct}:${c.paused}:${c.lastTestOk}`).join()}
+          conns={conns}
+          onSaved={(next) => {
+            setConns(next);
+            setNotice("Traffic split saved.");
+          }}
+          onError={setError}
+        />
+      )}
+
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="mb-2 font-semibold">Resources</h3>
         <p className="text-sm text-slate-500">
@@ -211,6 +254,97 @@ export function SMTPManager({ onBack }: { onBack: () => void }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function rootDomain(email: string): string {
+  const host = email.split("@")[1]?.toLowerCase() ?? "";
+  return host.split(".").slice(-2).join(".");
+}
+
+/*
+How mail is shared between senders. Saved all at once, because the active
+senders' shares must add up to 100% and editing them one at a time would pass
+through totals that do not. A sender at 0% is only used when the others fail.
+*/
+function TrafficSplit({
+  conns,
+  onSaved,
+  onError,
+}: {
+  conns: SMTPConnection[];
+  onSaved: (c: SMTPConnection[]) => void;
+  onError: (m: string) => void;
+}) {
+  const [rows, setRows] = useState(() =>
+    conns.map((c) => ({ id: c._id, name: c.displayName, sharePct: c.sharePct ?? 0, paused: !!c.paused, failed: c.lastTestOk === false })),
+  );
+  const [saving, setSaving] = useState(false);
+  const total = rows.filter((r) => !r.paused).reduce((n, r) => n + (Number(r.sharePct) || 0), 0);
+  const ok = rows.every((r) => r.paused) || total === 100;
+  const update = (id: string, p: Partial<(typeof rows)[number]>) => setRows(rows.map((r) => (r.id === id ? { ...r, ...p } : r)));
+
+  async function save() {
+    setSaving(true);
+    try {
+      onSaved(await api<SMTPConnection[]>("/smtp/pool", { method: "PUT", body: { senders: rows.map(({ id, sharePct, paused }) => ({ id, sharePct, paused })) } }));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not save the split");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold">Traffic split</h3>
+      <p className="mb-3 text-sm text-slate-500">
+        Each email goes out through one active sender, chosen by these shares. If it fails, the next sender is tried. A
+        sender over its hourly or daily limit is skipped until the limit resets.
+      </p>
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center gap-3">
+            <span className="min-w-40 flex-1 text-sm font-medium">{r.name}</span>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={!r.paused}
+                disabled={r.failed && r.paused}
+                title={r.failed ? "Send a successful test first" : undefined}
+                onChange={(e) => update(r.id, { paused: !e.target.checked })}
+              />
+              Active
+            </label>
+            <label className="flex items-center gap-1 text-sm">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                disabled={r.paused}
+                className="input w-20 py-1"
+                value={r.paused ? 0 : r.sharePct}
+                onChange={(e) => update(r.id, { sharePct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              />
+              %
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center gap-3">
+        <span className={`text-sm font-medium ${ok ? "text-emerald-700" : "text-rose-700"}`}>
+          Active total: {total}% {ok ? "" : "(must be 100%)"}
+        </span>
+        <div className="flex-1" />
+        <button
+          onClick={save}
+          disabled={saving || !ok}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save split"}
+        </button>
+      </div>
     </div>
   );
 }

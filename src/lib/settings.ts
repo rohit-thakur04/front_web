@@ -24,7 +24,7 @@ export const SETTINGS_TILES: SettingsTile[] = [
   { section: "staff", title: "Staff", description: "Team logins and scoped permissions, managed inside a client account.", icon: "Contacts", live: true },
   { section: "tags", title: "Tags", description: "Organize contacts and records with reusable labels.", icon: "Layers" },
   { section: "values", title: "Values", description: "Configure dropdowns, statuses, and reusable value sets.", icon: "Sparkle" },
-  { section: "fields", title: "Fields", description: "Create custom fields for contacts, companies, and records.", icon: "Dashboard" },
+  { section: "fields", title: "Custom Fields", description: "Extra contact fields such as City or Age, for forms, webhooks and workflows.", icon: "Dashboard", live: true },
   { section: "templates", title: "Templates", description: "Reusable templates for notes, outreach, and documents.", icon: "Mail" },
   { section: "app-store", title: "App Store", description: "Connect Google, Meta, WhatsApp, Zoom, and AI providers.", icon: "Layers", live: true },
   { section: "domains", title: "Domains", description: "Serve your pages and short links on your own domain.", icon: "ExternalLink", live: true },

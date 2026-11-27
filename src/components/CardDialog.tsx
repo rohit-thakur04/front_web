@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ContactSubmissions } from "@/components/ContactSubmissions";
 import { api } from "@/lib/api";
 import { PHONE_PATTERN, PHONE_TITLE, sanitizePhoneInput } from "@/lib/phone";
-import type { Card, Pipeline, Stage } from "@/lib/types";
+import type { Card, CustomField, Pipeline, Stage } from "@/lib/types";
 
 interface Props {
   /** Where a new contact lands when the caller already knows the stage. */
@@ -60,6 +60,21 @@ export function CardDialog({
   const [tags, setTags] = useState<string[]>(card?.tags ?? []);
   const [tagDraft, setTagDraft] = useState("");
   const [dnd, setDnd] = useState(card?.dnd ?? false);
+  const [unsubscribed, setUnsubscribed] = useState(card?.emailUnsubscribed ?? false);
+  // The account's custom fields, and this contact's values for them.
+  const [fieldDefs, setFieldDefs] = useState<CustomField[]>([]);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(card?.fields ?? {});
+
+  useEffect(() => {
+    if (!card) return;
+    let live = true;
+    api<CustomField[]>("/custom-fields")
+      .then((f) => live && setFieldDefs(f))
+      .catch(() => live && setFieldDefs([]));
+    return () => {
+      live = false;
+    };
+  }, [card]);
 
   function addTag(raw: string) {
     const tag = raw.trim();
@@ -181,7 +196,13 @@ export function CardDialog({
 
     try {
       if (card) {
-        await api(`/cards/${card._id}`, { method: "PUT", body });
+        // Only the defined fields are sent; a blank one clears that value.
+        const fields: Record<string, string> = {};
+        for (const f of fieldDefs) fields[f.key] = (fieldValues[f.key] ?? "").trim();
+        await api(`/cards/${card._id}`, {
+          method: "PUT",
+          body: { ...body, emailUnsubscribed: unsubscribed, ...(fieldDefs.length ? { fields } : {}) },
+        });
         /*
          * The move is a second call because it is a different operation: it
          * stops the old stage's email sequence and starts the new one, which
@@ -373,6 +394,35 @@ export function CardDialog({
               </span>
             </span>
           </label>
+        )}
+
+        {card && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-2.5">
+            <input type="checkbox" checked={unsubscribed} onChange={(e) => setUnsubscribed(e.target.checked)} className="mt-0.5" />
+            <span className="text-sm">
+              <span className="font-medium">Unsubscribed from email</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                Set when they click Unsubscribe in an email. No automated email goes to them; WhatsApp still can.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {card && fieldDefs.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-slate-200 p-2.5">
+            <p className="text-sm font-medium">Custom fields</p>
+            {fieldDefs.map((f) => (
+              <label key={f.key} className="block text-xs text-slate-600">
+                {f.label}
+                <input
+                  type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                  value={fieldValues[f.key] ?? ""}
+                  onChange={(e) => setFieldValues({ ...fieldValues, [f.key]: e.target.value })}
+                  className="mt-0.5 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </label>
+            ))}
+          </div>
         )}
 
         {/* A contact cannot exist outside a stage, so a page that spans every

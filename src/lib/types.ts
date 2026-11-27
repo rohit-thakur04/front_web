@@ -111,6 +111,12 @@ export interface Workflow {
   trigger: string;
   triggerConfig: Record<string, unknown>;
   steps: WorkflowStep[];
+  /** Time zone, re-entry and the enrolment window. */
+  settings?: WorkflowSettings;
+  /** End a contact's run the moment one of these is true, even mid-wait. */
+  exitGoals?: ExitGoal[];
+  /** Goes up on every save; older versions are in history. */
+  version?: number;
   createdAt: string;
   updatedAt: string;
   // Derived server-side for the list view; absent on a workflow that never ran.
@@ -124,6 +130,131 @@ export interface Workflow {
    * on workflows that have no use for it.
    */
   webhookUrl?: string;
+}
+
+export interface WorkflowSettings {
+  timeZone: string;
+  allowReentry: boolean;
+  reentryWaitHours: number;
+  enableAt?: string | null;
+  disableAt?: string | null;
+}
+
+/** A condition on the contact (like If/Else) that ends the run once true. */
+export interface ExitGoal {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+export interface WorkflowVersion {
+  _id: string;
+  version: number;
+  name: string;
+  status: string;
+  steps: WorkflowStep[];
+  savedBy: string;
+  savedAt: string;
+}
+
+export interface WebhookCapture {
+  fields: { key: string; value: string }[];
+  receivedAt?: string;
+}
+
+export type RunStatusKey =
+  | "running"
+  | "waiting_time"
+  | "waiting_window"
+  | "waiting_reply"
+  | "completed"
+  | "failed"
+  | "stopped"
+  | "skipped"
+  | "cancelled";
+
+/** One row in Execution Logs / All Logs. */
+export interface RunRow {
+  _id: string;
+  workflowId: string;
+  workflowName: string;
+  cardId: string;
+  contact: string;
+  status: string;
+  waiting?: string;
+  statusLabel: string;
+  reason: string;
+  stepLabel: string;
+  error?: string;
+  issues: number;
+  startedAt: string;
+  endedAt?: string | null;
+  nextRunAt?: string | null;
+  durationMs: number;
+}
+
+export interface RunStats {
+  total: number;
+  byStatus: Partial<Record<RunStatusKey, number>>;
+  finished: number;
+  successRate: number | null;
+  avgDurationMs: number;
+  trend: { day: string; runs: number; fails: number }[];
+}
+
+export interface RunsResponse {
+  runs: RunRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  stats: RunStats;
+}
+
+/** The Email and WABA tabs of All Logs. */
+export interface MessageLogsResponse {
+  rows: {
+    _id: string;
+    at: string;
+    contact: string;
+    name: string;
+    label: string;
+    group: "completed" | "failed" | "cancelled";
+    detail: string;
+    runId?: string;
+  }[];
+  total: number;
+  page: number;
+  pageSize: number;
+  groups: Partial<Record<"completed" | "failed" | "cancelled", number>>;
+}
+
+export interface RunDetail {
+  run: {
+    _id: string;
+    workflowId: string;
+    cardId: string;
+    status: string;
+    waiting?: string;
+    contact: string;
+    reason: string;
+    stepLabel: string;
+    lastError: string;
+    vars?: Record<string, string>;
+    nextRunAt?: string | null;
+    createdAt: string;
+    endedAt?: string | null;
+  };
+  statusLabel: string;
+  workflowName: string;
+  steps: (WorkflowActivity & { stepLabel?: string })[];
+}
+
+/** A tenant-defined contact field (City, Age...). */
+export interface CustomField {
+  _id: string;
+  key: string;
+  label: string;
+  type: "text" | "number" | "date";
 }
 
 // One reason a workflow cannot be published yet, as the server reports it.
@@ -170,8 +301,11 @@ export interface WorkflowActivity {
     // so the timeline cannot present it as a clean success.
     | "completed_with_issues"
     | "failed"
-    | "skipped";
+    | "skipped"
+    | (string & {});
   detail: string;
+  /** The step that wrote this entry. */
+  stepLabel?: string;
   createdAt: string;
 }
 
@@ -464,6 +598,16 @@ export interface SMTPConnection {
   isDefault: boolean;
   // Whether a password is stored (the value itself is never returned).
   hasPassword: boolean;
+  /** Out of rotation. */
+  paused?: boolean;
+  /** Share of traffic among active senders; active shares total 100. */
+  sharePct?: number;
+  /** Result of the last "Send test"; null = never tested. */
+  lastTestOk?: boolean | null;
+  lastTestAt?: string | null;
+  lastTestError?: string;
+  sentToday?: number;
+  sentThisHour?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -596,6 +740,12 @@ export interface Card {
   dnd?: boolean;
   /** The staff member responsible, if anyone. */
   assignedTo?: string | null;
+  /** Custom field values, by CustomField key. */
+  fields?: Record<string, string>;
+  /** Clicked Unsubscribe: no automated email (WhatsApp unaffected). */
+  emailUnsubscribed?: boolean;
+  /** Last WhatsApp message from the contact (opens the 24-hour window). */
+  lastWhatsAppInAt?: string | null;
   stageId: string;
   pipelineId: string;
   ownerId: string;

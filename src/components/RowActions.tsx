@@ -32,11 +32,12 @@ const TONE: Record<Tone, string> = {
 const BASE =
   "inline-flex h-8 w-8 items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-40";
 
-type Action = "open" | "login" | "edit" | "delete";
+type Action = "open" | "login" | "edit" | "copy" | "delete";
 
 function content(name: Action) {
   if (name === "open") return <Icon.ExternalLink width={16} height={16} />;
   if (name === "login") return <Icon.Login width={16} height={16} />;
+  if (name === "copy") return <Icon.Copy width={16} height={16} />;
   if (name === "edit") return <Icon.Pencil width={16} height={16} />;
   return <Icon.Trash width={16} height={16} />;
 }

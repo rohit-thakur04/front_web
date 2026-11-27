@@ -40,6 +40,8 @@ export default function WabaListPage() {
   // True when the account was set up but its stored keys no longer decrypt.
   // A different problem from "never connected", and different advice.
   const [needsReconnect, setNeedsReconnect] = useState(false);
+  // Where Meta sends replies and delivery receipts for this account.
+  const [inbound, setInbound] = useState<{ url: string; token: string } | null>(null);
 
   async function load() {
     try {
@@ -48,11 +50,12 @@ export default function WabaListPage() {
       setError(e instanceof Error ? e.message : "Could not load templates");
     }
     try {
-      const conn = await api<{ connected: boolean; needsReconnect?: boolean }>(
+      const conn = await api<{ connected: boolean; needsReconnect?: boolean; inboundUrl?: string; verifyToken?: string }>(
         "/waba/connection",
       );
       setConnected(conn.connected);
       setNeedsReconnect(Boolean(conn.needsReconnect));
+      if (conn.inboundUrl && conn.verifyToken) setInbound({ url: conn.inboundUrl, token: conn.verifyToken });
     } catch {
       // A failed check must not hide the templates; assume connected and let
       // the server's own gate answer if an action is actually attempted.
@@ -66,16 +69,15 @@ export default function WabaListPage() {
     setError("");
     setNotice("");
     try {
-      const res = await api<{ updated: number; templates: WabaTemplate[] }>(
+      const res = await api<{ updated: number; imported?: number; templates: WabaTemplate[] }>(
         "/waba/refresh-status",
         { method: "POST" },
       );
       setTemplates(res.templates);
-      setNotice(
-        res.updated > 0
-          ? `Synced with Meta — ${res.updated} template${res.updated === 1 ? "" : "s"} updated.`
-          : "Synced with Meta — no status changes.",
-      );
+      const parts = [];
+      if (res.updated > 0) parts.push(`${res.updated} template${res.updated === 1 ? "" : "s"} updated`);
+      if (res.imported) parts.push(`${res.imported} brought in from WhatsApp Manager`);
+      setNotice(parts.length ? `Synced with Meta: ${parts.join(", ")}.` : "Synced with Meta: nothing changed.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not refresh from Meta");
     } finally {
@@ -117,7 +119,7 @@ export default function WabaListPage() {
               }
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
             >
-              {refreshing ? "Refreshing…" : "↻ Refresh status"}
+              {refreshing ? "Syncing…" : "↻ Sync from Meta"}
             </button>
             {connected === false ? (
               /* A span, not a Link: a disabled anchor is still clickable, so the
@@ -185,6 +187,7 @@ export default function WabaListPage() {
       {/* Only once there is a connection to spend through. Showing a client a
           bill for an account they have not set up is noise. */}
       {connected === true && <MessageSpend />}
+      {connected === true && inbound && <InboundSetup url={inbound.url} token={inbound.token} />}
 
       {error && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
@@ -249,5 +252,50 @@ export default function WabaListPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+/*
+Where Meta should send this account's WhatsApp replies and delivery receipts.
+Without it the app can send but never hears back: no Wait for Reply, no
+Message Received trigger, and no 24-hour window check.
+*/
+function InboundSetup({ url, token }: { url: string; token: string }) {
+  const [copied, setCopied] = useState("");
+  const copy = async (what: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(what);
+      setTimeout(() => setCopied(""), 2000);
+    } catch {
+      setCopied("");
+    }
+  };
+  return (
+    <details className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+      <summary className="cursor-pointer font-medium">Receive replies (webhook setup)</summary>
+      <p className="mt-2 text-sm text-slate-600">
+        So workflows can react when a contact replies, in your Meta app open <b>WhatsApp → Configuration → Webhook → Edit</b>,
+        paste these two values, click Verify and save, then subscribe to the <b>messages</b> field.
+      </p>
+      {[
+        ["Callback URL", url],
+        ["Verify token", token],
+      ].map(([label, value]) => (
+        <div key={label} className="mt-3">
+          <p className="mb-1 text-xs font-medium text-slate-500">{label}</p>
+          <div className="flex gap-2">
+            <input readOnly value={value} className="input flex-1 font-mono text-xs" onFocus={(e) => e.target.select()} />
+            <button onClick={() => copy(label, value)} className="rounded-lg border border-slate-300 px-3 text-xs hover:bg-slate-50">
+              {copied === label ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      ))}
+      <p className="mt-3 text-xs text-slate-500">
+        Keep these private: they let messages into your account. A message from a number not in your contacts is added as
+        a new contact tagged <code>whatsapp</code>.
+      </p>
+    </details>
   );
 }

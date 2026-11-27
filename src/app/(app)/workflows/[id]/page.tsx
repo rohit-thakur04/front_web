@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 import type {
   CatalogItem,
+  CustomField,
   EmailTemplate,
+  ExitGoal,
   Form,
   MetaPageForms,
   Pipeline,
@@ -14,12 +16,17 @@ import type {
   Stage,
   User,
   WabaTemplate,
+  WebhookCapture,
   Workflow,
-  WorkflowActivity,
   WorkflowCatalog,
+  WorkflowSettings,
   WorkflowStep,
+  WorkflowVersion,
 } from "@/lib/types";
 import { CatalogPicker } from "@/components/workflow/CatalogPicker";
+import { RunAnalytics, RunLogs } from "@/components/logs/RunLogs";
+import { Toggle } from "@/components/ui";
+import { designOf, downloadJSON } from "@/lib/workflowDesign";
 import {
   ROOT,
   insertIntoContainer,
@@ -34,15 +41,30 @@ function genId(): string {
   return "s_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+type Tab = "builder" | "settings" | "logs" | "analytics";
+
 export default function WorkflowBuilderPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
 
   const [wf, setWf] = useState<Workflow | null>(null);
   const [catalog, setCatalog] = useState<WorkflowCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [dirty, setDirty] = useState(false);
+  /*
+   * "Unsaved" is a comparison with what was last saved, not a flag set by
+   * every edit. Opening a step and closing it, or picking the value a field
+   * already had, used to mark the workflow unsaved and offer to republish it.
+   */
+  const [savedDesign, setSavedDesign] = useState("");
+  const dirty = wf ? designOf(wf) !== savedDesign : false;
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<Tab>("builder");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
   // The owner's saved email templates, for the Send Email step's picker.
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
 
@@ -57,7 +79,6 @@ export default function WorkflowBuilderPage() {
   );
   // Config panel selection: the trigger, or a step by id.
   const [selected, setSelected] = useState<{ kind: "trigger" | "step"; id?: string } | null>(null);
-  const [showActivity, setShowActivity] = useState(false);
   /*
    * What the trigger and the actions need to offer a choice.
    *
@@ -86,7 +107,9 @@ export default function WorkflowBuilderPage() {
           api<WorkflowCatalog>("/workflows/catalog"),
         ]);
         setWf(w);
+        setSavedDesign(designOf(w));
         setCatalog(c);
+        api<CustomField[]>("/custom-fields").then(setCustomFields).catch(() => setCustomFields([]));
         // Templates are a nice-to-have for the Send Email picker; a missing
         // "email" feature shouldn't break the builder.
         try {
@@ -146,7 +169,43 @@ export default function WorkflowBuilderPage() {
 
   function patch(next: Partial<Workflow>) {
     setWf((prev) => (prev ? { ...prev, ...next } : prev));
-    setDirty(true);
+  }
+
+  // Closing the tab with unsaved changes asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  async function clone() {
+    setMenuOpen(false);
+    try {
+      const copy = await api<Workflow>(`/workflows/${id}/clone`, { method: "POST" });
+      router.push(`/workflows/${copy._id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not copy the workflow");
+    }
+  }
+
+  function exportJSON() {
+    setMenuOpen(false);
+    if (!wf) return;
+    const { name, trigger, triggerConfig, steps, settings, exitGoals } = wf;
+    downloadJSON(`${name.replace(/[^\w-]+/g, "_") || "workflow"}.json`, {
+      name, trigger, triggerConfig, steps, settings, exitGoals,
+    });
   }
 
   function onPick(item: CatalogItem) {
@@ -208,12 +267,10 @@ export default function WorkflowBuilderPage() {
       if (!selected) return;
       if (selected.kind === "trigger") {
         setWf((prev) => (prev ? { ...prev, trigger: "", triggerConfig: {} } : prev));
-        setDirty(true);
         setSelected(null);
       } else if (selected.kind === "step" && selected.id) {
         const sid = selected.id;
         setWf((prev) => (prev ? { ...prev, steps: removeStep(prev.steps, sid) } : prev));
-        setDirty(true);
         setSelected(null);
       }
     }
@@ -224,11 +281,13 @@ export default function WorkflowBuilderPage() {
   // Why a publish was refused, listed under the top bar until it is fixed.
   const [blockers, setBlockers] = useState<PublishProblem[]>([]);
 
-  async function save(nextStatus?: "draft" | "published") {
-    if (!wf) return;
+  async function save(nextStatus?: "draft" | "published"): Promise<boolean> {
+    if (!wf) return false;
     setSaving(true);
     setError("");
+    setNotice("");
     setBlockers([]);
+    const goingLive = (nextStatus ?? wf.status) === "published";
     try {
       const body = {
         name: wf.name,
@@ -236,10 +295,22 @@ export default function WorkflowBuilderPage() {
         trigger: wf.trigger,
         triggerConfig: wf.triggerConfig,
         steps: wf.steps,
+        settings: wf.settings ?? DEFAULT_SETTINGS,
+        exitGoals: wf.exitGoals ?? [],
       };
       const saved = await api<Workflow>(`/workflows/${id}`, { method: "PUT", body });
       setWf(saved);
-      setDirty(false);
+      setSavedDesign(designOf(saved));
+      /*
+       * Asked once, at publish: a drip that waits more than two days with no
+       * exit goal keeps messaging people who already bought or replied.
+       */
+      if (goingLive && totalWaitHours(saved.steps) > 48 && (saved.exitGoals ?? []).length === 0) {
+        setNotice(
+          "This workflow waits more than 2 days. Add an exit goal in Settings (for example, tagged Purchased) so it stops for people who are done.",
+        );
+      }
+      return true;
     } catch (e) {
       // 422 is the pre-flight refusal: the server lists what is unconfigured
       // rather than publishing something that would silently do nothing.
@@ -247,9 +318,15 @@ export default function WorkflowBuilderPage() {
         setBlockers(e.detail.problems as PublishProblem[]);
       }
       setError(e instanceof Error ? e.message : "Could not save");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  function leave() {
+    if (dirty) setLeaving(true);
+    else router.push("/workflows");
   }
 
   if (loading) return <p className="p-6 text-sm text-slate-500">Loading…</p>;
@@ -262,13 +339,14 @@ export default function WorkflowBuilderPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Top bar */}
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-        <Link href="/workflows" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+        <button onClick={leave} aria-label="Back to workflows" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
           ←
-        </Link>
+        </button>
         <input
           value={wf.name}
           onChange={(e) => patch({ name: e.target.value })}
+          aria-label="Workflow name"
           className="max-w-xs rounded-lg border border-transparent px-2 py-1 text-lg font-semibold hover:border-slate-200 focus:border-slate-300 focus:outline-none"
         />
         <span
@@ -276,22 +354,31 @@ export default function WorkflowBuilderPage() {
             wf.status === "published" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
           }`}
         >
-          {wf.status}
+          {wf.status === "published" ? "Live" : wf.status === "paused" ? "Paused" : "Draft"}
         </span>
-        {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-        {selected && (
-          <span className="hidden text-xs text-slate-400 sm:inline">
-            Press <kbd className="rounded border border-slate-300 px-1">Del</kbd> to remove selected
-          </span>
-        )}
+        <span className="text-xs text-slate-400" title="Every save is kept in Version history">
+          v{wf.version ?? 1} · {countSteps(wf.steps)} step{countSteps(wf.steps) === 1 ? "" : "s"}
+          {(wf.exitGoals ?? []).length > 0 && ` · ${(wf.exitGoals ?? []).length} exit goal${(wf.exitGoals ?? []).length === 1 ? "" : "s"}`}
+        </span>
+        {dirty && <span className="text-xs font-medium text-amber-600">Unsaved changes</span>}
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setShowActivity(true)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-          >
-            Activity
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
+              More ▾
+            </button>
+            {menuOpen && (
+              <div role="menu" className="ark-pop absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                <MenuItem onClick={() => { setMenuOpen(false); setShowVersions(true); }}>Version history</MenuItem>
+                <MenuItem onClick={clone}>Make a copy</MenuItem>
+                <MenuItem onClick={exportJSON}>Export as file</MenuItem>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => save(wf.status === "published" ? "draft" : "published")}
             disabled={saving}
@@ -302,15 +389,47 @@ export default function WorkflowBuilderPage() {
           <button
             onClick={() => save()}
             disabled={saving || !dirty}
+            title={wf.status === "published" ? "Saving a live workflow updates it straight away" : undefined}
             className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : wf.status === "published" ? "Save & update live" : "Save"}
           </button>
         </div>
       </div>
 
+      <nav className="flex gap-1 border-b border-slate-200 bg-white px-4" aria-label="Workflow sections">
+        {(
+          [
+            ["builder", "Builder"],
+            ["settings", "Settings"],
+            ["logs", "Execution logs"],
+            ["analytics", "Analytics"],
+          ] as [Tab, string][]
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            aria-current={tab === key ? "page" : undefined}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+              tab === key ? "border-[var(--ark-primary)] text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {label}
+            {key === "settings" && (wf.exitGoals ?? []).length === 0 && totalWaitHours(wf.steps) > 48 && (
+              <span className="ml-1 text-amber-600" title="No exit goal on a long workflow">●</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
       {error && blockers.length === 0 && (
         <p className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
+      )}
+      {notice && (
+        <p className="flex items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          {notice}
+          <button className="underline" onClick={() => { setTab("settings"); setNotice(""); }}>Add one</button>
+        </p>
       )}
 
       {/* Shown instead of the generic error when the publish was refused: the
@@ -351,7 +470,29 @@ export default function WorkflowBuilderPage() {
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      {tab === "settings" && (
+        <div className="flex-1 overflow-auto bg-slate-50 p-6">
+          <WorkflowSettingsPanel
+            settings={wf.settings ?? DEFAULT_SETTINGS}
+            goals={wf.exitGoals ?? []}
+            customFields={customFields}
+            onSettings={(s) => patch({ settings: s })}
+            onGoals={(g) => patch({ exitGoals: g })}
+          />
+        </div>
+      )}
+      {tab === "logs" && (
+        <div className="flex-1 overflow-auto bg-slate-50 p-6">
+          <RunLogs workflowId={id} />
+        </div>
+      )}
+      {tab === "analytics" && (
+        <div className="flex-1 overflow-auto bg-slate-50 p-6">
+          <RunAnalytics workflowId={id} />
+        </div>
+      )}
+
+      <div className={`flex flex-1 overflow-hidden ${tab === "builder" ? "" : "hidden"}`}>
         {/* Canvas */}
         <div className="flex-1 overflow-auto bg-slate-50 p-8">
           <div className="mx-auto flex w-full max-w-xl flex-col items-center">
@@ -424,6 +565,8 @@ export default function WorkflowBuilderPage() {
                 stages={stages}
                 staff={staff}
                 webhookUrl={wf.webhookUrl}
+                workflowId={id}
+                customFields={customFields}
                 onConfig={(next) =>
                   patch({ triggerConfig: { ...(wf.triggerConfig ?? {}), ...next } })
                 }
@@ -439,6 +582,7 @@ export default function WorkflowBuilderPage() {
                 pipelines={pipelines}
                 stages={stages}
                 staff={staff}
+                customFields={customFields}
                 onChange={(p) => editStep(selectedStep.id, p)}
                 onClose={() => setSelected(null)}
               />
@@ -447,7 +591,50 @@ export default function WorkflowBuilderPage() {
         )}
       </div>
 
-      {showActivity && <ActivityDrawer workflowId={id} onClose={() => setShowActivity(false)} />}
+      {showVersions && (
+        <VersionsDrawer
+          workflowId={id}
+          current={wf.version ?? 1}
+          dirty={dirty}
+          onRestored={(w) => {
+            setWf(w);
+            setSavedDesign(designOf(w));
+            setShowVersions(false);
+          }}
+          onClose={() => setShowVersions(false)}
+        />
+      )}
+
+      {leaving && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div role="dialog" aria-label="Unsaved changes" className="w-full max-w-sm rounded-xl bg-white p-5 shadow-[var(--ark-shadow-overlay)]">
+            <h2 className="mb-2 text-lg font-semibold">You have unsaved changes</h2>
+            <p className="mb-4 text-sm text-slate-600">
+              {wf.status === "published"
+                ? "Saving updates the live workflow. Contacts already in it continue on the new version."
+                : "Save them before leaving, or discard them."}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                disabled={saving}
+                onClick={async () => {
+                  if (await save()) router.push("/workflows");
+                  else setLeaving(false);
+                }}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {wf.status === "published" ? "Save and update live" : "Save and leave"}
+              </button>
+              <button onClick={() => router.push("/workflows")} className="rounded-lg border border-rose-300 px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">
+                Discard and leave
+              </button>
+              <button onClick={() => setLeaving(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {picker && catalog && (
         <CatalogPicker
@@ -697,6 +884,8 @@ function TriggerConfig({
   stages,
   staff,
   webhookUrl,
+  workflowId,
+  customFields,
   onConfig,
   onChangeTrigger,
   onRemove,
@@ -709,6 +898,8 @@ function TriggerConfig({
   stages: Stage[];
   staff: User[];
   webhookUrl?: string;
+  workflowId: string;
+  customFields: CustomField[];
   onConfig: (patch: Record<string, unknown>) => void;
   onChangeTrigger: () => void;
   onRemove: () => void;
@@ -964,7 +1155,37 @@ function TriggerConfig({
               onChange={(e) => onConfig({ redirectUrl: e.target.value })}
             />
           </TriggerField>
+          <WebhookMapping
+            workflowId={workflowId}
+            url={webhookUrl}
+            mapping={(config.mapping as Record<string, string>) ?? {}}
+            customFields={customFields}
+            onMapping={(m) => onConfig({ mapping: m })}
+          />
           {webhookUrl && <LandingFormSnippet url={webhookUrl} />}
+          <details className="rounded-lg border border-slate-200 p-3">
+            <summary className="cursor-pointer text-sm font-medium">Advanced: only some calls</summary>
+            <div className="mt-3 space-y-3">
+              <TriggerField label="Source App" hint="Run only when the call sends _source_app with this value. Leave blank for any.">
+                <input className="input" value={str("sourceApp")} placeholder="e.g. zoom" onChange={(e) => onConfig({ sourceApp: e.target.value })} />
+              </TriggerField>
+              <TriggerField label="Event Type" hint="Run only when the call sends _event_type with this value. Leave blank for any.">
+                <input className="input" value={str("eventType")} placeholder="e.g. registration" onChange={(e) => onConfig({ eventType: e.target.value })} />
+              </TriggerField>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {item.key === "message_received" && (
+        <div className="mb-4 space-y-3">
+          <TriggerField label="Only when the message contains" hint="Leave blank to run for every message. Not case-sensitive.">
+            <input className="input" value={str("keyword")} placeholder="e.g. price" onChange={(e) => onConfig({ keyword: e.target.value })} />
+          </TriggerField>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            The message is available as <code>{"{{variables.reply}}"}</code>. Messages reach this app once your WhatsApp
+            webhook is set up: see the WhatsApp page.
+          </p>
         </div>
       )}
 
@@ -1272,8 +1493,8 @@ function WebhookAddress({ url }: { url?: string }) {
       <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
         Anyone with this address can add contacts to your account. In a website
         form it is public, like any contact form, so spam is held back by a
-        hidden trap field and a per-visitor limit. It only works once the
-        workflow is published.
+        hidden trap field and a per-visitor limit. While the workflow is a draft,
+        calls are only recorded as a test; it runs once published.
       </p>
     </div>
   );
@@ -1341,6 +1562,7 @@ function StepConfig({
   pipelines,
   stages,
   staff,
+  customFields,
   onChange,
   onClose,
 }: {
@@ -1350,6 +1572,7 @@ function StepConfig({
   pipelines: Pipeline[];
   stages: Stage[];
   staff: User[];
+  customFields: CustomField[];
   onChange: (patch: Partial<WorkflowStep>) => void;
   onClose: () => void;
 }) {
@@ -1396,6 +1619,8 @@ function StepConfig({
       "split",
       "filter",
       "goal_exit",
+      "end_workflow",
+      "waba_window",
     ].includes(step.type);
 
   return (
@@ -1666,9 +1891,12 @@ function StepConfig({
         {step.type === "send_whatsapp" && (
           <WabaTemplatePicker
             templateId={str("templateId")}
+            variables={Array.isArray(cfg.variables) ? (cfg.variables as string[]) : []}
+            customFields={customFields}
             onSelect={(id, name, language) =>
-              setMany({ templateId: id, templateName: name, templateLanguage: language })
+              setMany({ templateId: id, templateName: name, templateLanguage: language, variables: [] })
             }
+            onVariables={(v) => set("variables", v)}
           />
         )}
 
@@ -1676,6 +1904,34 @@ function StepConfig({
           <Field label="Tag">
             <input className="input" value={str("tag")} onChange={(e) => set("tag", e.target.value)} placeholder="e.g. hot-lead" />
           </Field>
+        )}
+
+        {step.type === "end_workflow" && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            The contact leaves the workflow here. Nothing after this step runs for them, and the run shows as Exited early.
+          </p>
+        )}
+
+        {step.type === "waba_window" && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <span className="font-medium text-emerald-600">Yes</span> if the contact sent you a WhatsApp message in the
+            last 24 hours: inside that window Meta allows any message and replies are free.{" "}
+            <span className="font-medium text-rose-600">No</span> otherwise, when only an approved template can be sent.
+            Needs your WhatsApp webhook set up (WhatsApp page).
+          </p>
+        )}
+
+        {step.type === "wait_reply" && (
+          <>
+            <Field label="Wait at most (hours)">
+              <input className="input" type="number" min={1} value={str("timeoutHours") || "24"} onChange={(e) => set("timeoutHours", e.target.value)} />
+            </Field>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Continues as soon as the contact replies on WhatsApp, or when the time runs out. Add an If / Else on
+              &quot;Replied on WhatsApp&quot; next to treat the two differently. The reply text is{" "}
+              <code>{"{{variables.reply}}"}</code>.
+            </p>
+          </>
         )}
 
         {step.type === "update_field" && (
@@ -1694,19 +1950,27 @@ function StepConfig({
                 <option value="email">Email</option>
                 <option value="phone">Phone</option>
                 <option value="value">Deal value</option>
+                {customFields.length > 0 && (
+                  <optgroup label="Custom fields">
+                    {customFields.map((f) => (
+                      <option key={f.key} value={`custom.${f.key}`}>{f.label}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </Field>
             <Field label="Value">
               <input
                 className="input"
-                type={str("field") === "value" ? "number" : "text"}
                 value={str("value")}
+                placeholder="Text, or {{variables.city}} from a webhook"
                 onChange={(e) => set("value", e.target.value)}
               />
             </Field>
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              To label a contact rather than change their details, use Add Tag —
-              tags are what conditions in other workflows can ask about.
+              Use <code>{"{{variables.name}}"}</code> to copy a value the trigger brought in. Need another field?{" "}
+              <Link href="/settings/fields" className="underline">Add a custom field</Link>. To label a contact,
+              use Add Tag.
             </p>
           </>
         )}
@@ -1783,7 +2047,7 @@ function StepConfig({
 
         {/* The plain duration wait. Wait Until and Business Hours are delays
             too but mean something else entirely, so they are excluded. */}
-        {isDelay && step.type !== "wait_until" && step.type !== "business_hours" && (
+        {isDelay && step.type !== "wait_until" && step.type !== "business_hours" && step.type !== "wait_reply" && (
           <>
             <div>
               <p className="mb-1.5 text-sm font-medium">Quick presets</p>
@@ -1818,8 +2082,32 @@ function StepConfig({
                 </select>
               </Field>
             </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={!!str("windowStart")}
+                  onChange={(e) =>
+                    e.target.checked ? setMany({ windowStart: "10:00", windowEnd: "18:00" }) : setMany({ windowStart: "", windowEnd: "" })
+                  }
+                />
+                Then only between certain times
+              </label>
+              {str("windowStart") && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Field label="From">
+                    <input className="input" type="time" value={str("windowStart")} onChange={(e) => set("windowStart", e.target.value)} />
+                  </Field>
+                  <Field label="To">
+                    <input className="input" type="time" value={str("windowEnd")} onChange={(e) => set("windowEnd", e.target.value)} />
+                  </Field>
+                </div>
+              )}
+            </div>
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              The workflow pauses here and resumes after the wait period.
+              {str("windowStart")
+                ? `Waits ${durationLabel(str("amount") || "1", str("unit") || "hours")}, then sends at the next ${str("windowStart")}–${str("windowEnd")} in the workflow's time zone (Settings).`
+                : "The workflow pauses here and resumes after the wait period."}
             </p>
           </>
         )}
@@ -1853,20 +2141,26 @@ function StepConfig({
             <Field label="Ask about">
               <select
                 className="input"
-                value={str("field")}
-                onChange={(e) => set("field", e.target.value)}
+                value={fieldSelectValue(str("field"))}
+                onChange={(e) =>
+                  e.target.value === "replied"
+                    ? setMany({ field: "replied", operator: "equals", value: "yes" })
+                    : set("field", e.target.value)
+                }
               >
-                <option value="">Choose…</option>
-                <option value="tag">Tag</option>
-                <option value="email">Email</option>
-                <option value="phone">Phone</option>
-                <option value="name">Name</option>
-                <option value="value">Deal value</option>
-                <option value="stage">Stage</option>
-                <option value="dnd">Do Not Disturb</option>
-                <option value="assigned">Assigned team member</option>
+                <FieldOptions customFields={customFields} />
               </select>
             </Field>
+            {str("field").startsWith("var.") && (
+              <Field label="Webhook field name">
+                <input
+                  className="input font-mono text-xs"
+                  placeholder="e.g. city or utm_source"
+                  value={str("field").slice(4)}
+                  onChange={(e) => set("field", "var." + e.target.value.trim())}
+                />
+              </Field>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Field label="Test">
                 <select
@@ -1874,28 +2168,16 @@ function StepConfig({
                   value={str("operator") || "equals"}
                   onChange={(e) => set("operator", e.target.value)}
                 >
-                  {str("field") === "tag" ? (
-                    <>
-                      <option value="equals">Has this tag</option>
-                      <option value="not_equals">Does not have this tag</option>
-                      <option value="exists">Has any tag</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="equals">Equals</option>
-                      <option value="not_equals">Does not equal</option>
-                      <option value="contains">Contains</option>
-                      <option value="not_contains">Does not contain</option>
-                      <option value="greater">Greater than</option>
-                      <option value="less">Less than</option>
-                      <option value="exists">Is set</option>
-                      <option value="not_exists">Is empty</option>
-                    </>
-                  )}
+                  <OperatorOptions field={str("field")} />
                 </select>
               </Field>
               <Field label="Value">
-                {str("field") === "stage" ? (
+                {str("field") === "replied" ? (
+                  <select className="input" value={str("value") || "yes"} onChange={(e) => set("value", e.target.value)}>
+                    <option value="yes">Replied</option>
+                    <option value="no">Did not reply</option>
+                  </select>
+                ) : str("field") === "stage" ? (
                   <StagePicker
                     value={str("value")}
                     pipelines={pipelines}
@@ -1970,174 +2252,474 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// Colors + icons for each activity action.
-/*
- * Every state gets its own glyph, not just its own colour.
- *
- * A skipped send used to carry the same ✉ or ◆ as a successful one and differed
- * only in hue, so a dry-run notice read as an ordinary informational line. The
- * glyph now says what happened before colour is considered at all — which is
- * also the only version that works for a colour-blind reader.
- */
-const ACTIVITY_STYLE: Record<string, { icon: string; cls: string }> = {
-  enrolled: { icon: "→", cls: "text-slate-600" },
-  email_sent: { icon: "✉", cls: "text-emerald-600" },
-  email_failed: { icon: "✕", cls: "text-rose-600" },
-  email_skipped: { icon: "▲", cls: "text-amber-600" },
-  whatsapp_sent: { icon: "◆", cls: "text-emerald-600" },
-  whatsapp_failed: { icon: "✕", cls: "text-rose-600" },
-  whatsapp_skipped: { icon: "▲", cls: "text-amber-600" },
-  delay: { icon: "⏱", cls: "text-slate-500" },
-  // A wait that did not wait — Business Hours inside its own hours, or a date
-  // already past. Distinct from "delay" so nobody reads it as a pause.
-  waited: { icon: "⏱", cls: "text-slate-500" },
-  branch: { icon: "⑃", cls: "text-blue-600" },
-  notified: { icon: "🔔", cls: "text-emerald-600" },
-  notify_failed: { icon: "✕", cls: "text-rose-600" },
-  notify_skipped: { icon: "▲", cls: "text-amber-600" },
-  tagged: { icon: "🏷", cls: "text-emerald-600" },
-  untagged: { icon: "🏷", cls: "text-slate-600" },
-  tag_skipped: { icon: "▲", cls: "text-amber-600" },
-  tag_failed: { icon: "✕", cls: "text-rose-600" },
-  field_updated: { icon: "✎", cls: "text-emerald-600" },
-  field_skipped: { icon: "▲", cls: "text-amber-600" },
-  field_failed: { icon: "✕", cls: "text-rose-600" },
-  value_updated: { icon: "₹", cls: "text-emerald-600" },
-  value_skipped: { icon: "▲", cls: "text-amber-600" },
-  value_failed: { icon: "✕", cls: "text-rose-600" },
-  assigned: { icon: "👤", cls: "text-emerald-600" },
-  assign_skipped: { icon: "▲", cls: "text-amber-600" },
-  assign_failed: { icon: "✕", cls: "text-rose-600" },
-  dnd_set: { icon: "🛡", cls: "text-slate-600" },
-  dnd_skipped: { icon: "▲", cls: "text-amber-600" },
-  dnd_failed: { icon: "✕", cls: "text-rose-600" },
-  webhook_sent: { icon: "🔗", cls: "text-emerald-600" },
-  webhook_skipped: { icon: "▲", cls: "text-amber-600" },
-  webhook_failed: { icon: "✕", cls: "text-rose-600" },
-  stage_moved: { icon: "➡", cls: "text-emerald-600" },
-  stage_skipped: { icon: "▲", cls: "text-amber-600" },
-  stage_failed: { icon: "✕", cls: "text-rose-600" },
-  /*
-   * Two ways a run ends early, and neither is a failure.
-   *
-   * A filter that did not match and a goal that was reached are both correct
-   * outcomes. Showing either in red would have somebody debugging a workflow
-   * that is working exactly as designed.
-   */
-  filtered: { icon: "⊘", cls: "text-slate-500" },
-  goal_met: { icon: "🎯", cls: "text-emerald-700" },
-  completed: { icon: "✓", cls: "text-emerald-700" },
-  // A run that finished with steps that never ran is not a success. It used to
-  // show the same green tick as a clean run, which is how you demo a WhatsApp
-  // workflow that has never sent a message and see nothing but ticks.
-  completed_with_issues: { icon: "▲", cls: "text-amber-700" },
-  failed: { icon: "✕", cls: "text-rose-600" },
-  skipped: { icon: "▲", cls: "text-amber-600" },
+const DEFAULT_SETTINGS: WorkflowSettings = {
+  timeZone: "",
+  allowReentry: false,
+  reentryWaitHours: 0,
+  enableAt: null,
+  disableAt: null,
 };
 
-// ActivityDrawer shows the recent run timeline for this workflow: which contacts
-// entered it and what happened to them (sent/skipped/failed/waiting/done).
-function ActivityDrawer({ workflowId, onClose }: { workflowId: string; onClose: () => void }) {
-  const [events, setEvents] = useState<WorkflowActivity[] | null>(null);
-  const [error, setError] = useState("");
+const TIME_ZONES = [
+  ["Asia/Kolkata", "India (IST)"],
+  ["Asia/Dubai", "Dubai (GST)"],
+  ["Asia/Singapore", "Singapore"],
+  ["Europe/London", "London"],
+  ["Europe/Berlin", "Central Europe"],
+  ["America/New_York", "New York"],
+  ["America/Los_Angeles", "Los Angeles"],
+  ["Australia/Sydney", "Sydney"],
+  ["UTC", "UTC"],
+];
 
-  async function load() {
-    setError("");
-    try {
-      setEvents(await api<WorkflowActivity[]>(`/workflows/${workflowId}/activity`));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load activity");
-      setEvents([]);
-    }
-  }
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const list = await api<WorkflowActivity[]>(`/workflows/${workflowId}/activity`);
-        if (alive) setEvents(list);
-      } catch (e) {
-        if (alive) {
-          setError(e instanceof Error ? e.message : "Could not load activity");
-          setEvents([]);
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [workflowId]);
-
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-md flex-col bg-white shadow-xl"
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <div>
-            <h3 className="font-semibold">Activity</h3>
-            <p className="text-xs text-slate-400">Recent runs for this workflow</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={load}
-              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50"
-            >
-              ↻ Refresh
-            </button>
-            <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
-              ✕
-            </button>
-          </div>
-        </div>
+    <button role="menuitem" onClick={onClick} className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
+      {children}
+    </button>
+  );
+}
 
-        <div className="flex-1 overflow-y-auto p-4">
-          {error && (
-            <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
-          )}
-          {events === null ? (
-            <p className="text-sm text-slate-500">Loading…</p>
-          ) : events.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-              No activity yet. Publish the workflow and create a contact to see runs here.
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {events.map((ev) => {
-                const style = ACTIVITY_STYLE[ev.action] ?? { icon: "•", cls: "text-slate-500" };
-                return (
-                  <li key={ev._id} className="flex gap-3">
-                    <span className={`mt-0.5 text-sm ${style.cls}`}>{style.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm">
-                        <span className="font-medium">{ev.contact || "Contact"}</span>{" "}
-                        <span className="text-slate-500">· {ev.detail}</span>
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {new Date(ev.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+function countSteps(steps: WorkflowStep[]): number {
+  return steps.reduce((n, s) => n + 1 + countSteps(s.yes ?? []) + countSteps(s.no ?? []), 0);
+}
+
+// The longest stretch of waiting a contact can sit through, in hours.
+function totalWaitHours(steps: WorkflowStep[]): number {
+  let total = 0;
+  for (const s of steps) {
+    const c = s.config ?? {};
+    if (s.type === "wait_delay" || s.type === "delay" || s.type === "wait") {
+      const n = Number(c.amount) || 1;
+      const unit = String(c.unit || "hours");
+      total += n * (unit === "minutes" ? 1 / 60 : unit === "days" ? 24 : unit === "weeks" ? 168 : 1);
+    } else if (s.type === "wait_reply") {
+      total += Number(c.timeoutHours) || 24;
+    }
+    if (s.yes || s.no) total += Math.max(totalWaitHours(s.yes ?? []), totalWaitHours(s.no ?? []));
+  }
+  return total;
+}
+
+// ISO <-> the value a datetime-local input wants, in the viewer's time.
+function toLocalInput(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
+
+/*
+The Settings tab: when the workflow runs, who may go through it again, and the
+exit goals that stop it early for people who are done.
+*/
+function WorkflowSettingsPanel({
+  settings,
+  goals,
+  customFields,
+  onSettings,
+  onGoals,
+}: {
+  settings: WorkflowSettings;
+  goals: ExitGoal[];
+  customFields: CustomField[];
+  onSettings: (s: WorkflowSettings) => void;
+  onGoals: (g: ExitGoal[]) => void;
+}) {
+  const set = (p: Partial<WorkflowSettings>) => onSettings({ ...settings, ...p });
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      <SettingsCard title="Exit goals" hint="The moment one of these is true, the contact leaves this workflow, even in the middle of a wait. Use it so people who bought or replied stop getting the drip.">
+        {goals.length === 0 && (
+          <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">No exit goals. Contacts go through every step.</p>
+        )}
+        <ul className="space-y-2">
+          {goals.map((g, i) => (
+            <li key={i} className="flex flex-wrap items-start gap-2 rounded-lg border border-slate-200 p-2">
+              <span className="pt-2 text-xs font-medium text-slate-500">Stop when</span>
+              <ConditionFields
+                field={g.field}
+                operator={g.operator}
+                value={g.value}
+                customFields={customFields}
+                onChange={(p) => onGoals(goals.map((x, j) => (j === i ? { ...x, ...p } : x)))}
+              />
+              <button onClick={() => onGoals(goals.filter((_, j) => j !== i))} aria-label="Remove goal" className="ml-auto rounded p-2 text-slate-400 hover:text-rose-600">✕</button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={() => onGoals([...goals, { field: "tag", operator: "equals", value: "" }])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            + Contact gets a tag
+          </button>
+          <button onClick={() => onGoals([...goals, { field: "replied", operator: "equals", value: "yes" }])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            + Contact replies on WhatsApp
+          </button>
+          <button onClick={() => onGoals([...goals, { field: "", operator: "equals", value: "" }])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            + Other condition
+          </button>
         </div>
-      </div>
+      </SettingsCard>
+
+      <SettingsCard title="Time zone" hint="Waits, time windows and business hours use this. A step can still name its own.">
+        <select className="input" value={settings.timeZone || "Asia/Kolkata"} onChange={(e) => set({ timeZone: e.target.value })}>
+          {TIME_ZONES.map(([z, label]) => (
+            <option key={z} value={z}>{label}</option>
+          ))}
+        </select>
+      </SettingsCard>
+
+      <SettingsCard title="Re-entry" hint="Whether a contact who already went through can go through again when the trigger fires again.">
+        <div className="flex items-center gap-3">
+          <Toggle checked={settings.allowReentry} onChange={(v) => set({ allowReentry: v })} label="Allow re-entry" />
+          <span className="text-sm">{settings.allowReentry ? "Contacts can enter again" : "Each contact goes through once"}</span>
+        </div>
+        {settings.allowReentry && (
+          <label className="mt-3 block text-sm">
+            Wait before they can re-enter (hours)
+            <input
+              type="number"
+              min={0}
+              className="input mt-1 w-40"
+              value={settings.reentryWaitHours || ""}
+              placeholder="No wait"
+              onChange={(e) => set({ reentryWaitHours: Math.max(0, Number(e.target.value) || 0) })}
+            />
+          </label>
+        )}
+        <p className="mt-2 text-xs text-slate-500">
+          A contact already in the workflow is never entered twice at once. Every skipped entry is in the logs with the reason.
+        </p>
+      </SettingsCard>
+
+      <SettingsCard title="Enrolment window" hint="Only enrol contacts between these times. Leave blank for always. Contacts already inside carry on.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            Start enrolling
+            <input type="datetime-local" className="input mt-1" value={toLocalInput(settings.enableAt)} onChange={(e) => set({ enableAt: fromLocalInput(e.target.value) })} />
+          </label>
+          <label className="text-sm">
+            Stop enrolling
+            <input type="datetime-local" className="input mt-1" value={toLocalInput(settings.disableAt)} onChange={(e) => set({ disableAt: fromLocalInput(e.target.value) })} />
+          </label>
+        </div>
+      </SettingsCard>
+      <p className="text-center text-xs text-slate-500">Press Save to apply these settings.</p>
     </div>
   );
 }
+
+function SettingsCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 className="font-semibold">{title}</h2>
+      <p className="mb-3 text-sm text-slate-500">{hint}</p>
+      {children}
+    </section>
+  );
+}
+
+/*
+What a condition can ask about: the contact's own fields, custom fields, a
+value the trigger carried (a webhook field), and whether they replied.
+Shared by If / Else, filters and exit goals so the list cannot drift.
+*/
+function FieldOptions({ customFields }: { customFields: CustomField[] }) {
+  return (
+    <>
+      <option value="">Choose…</option>
+      <optgroup label="Contact">
+        <option value="tag">Tag</option>
+        <option value="name">Name</option>
+        <option value="email">Email</option>
+        <option value="phone">Phone</option>
+        <option value="value">Deal value</option>
+        <option value="stage">Stage</option>
+        <option value="dnd">Do Not Disturb</option>
+        <option value="assigned">Assigned team member</option>
+      </optgroup>
+      {customFields.length > 0 && (
+        <optgroup label="Custom fields">
+          {customFields.map((f) => (
+            <option key={f.key} value={`custom.${f.key}`}>{f.label}</option>
+          ))}
+        </optgroup>
+      )}
+      <optgroup label="This run">
+        <option value="replied">Replied on WhatsApp</option>
+        <option value="var.">A webhook / trigger value…</option>
+      </optgroup>
+    </>
+  );
+}
+
+const fieldSelectValue = (field: string) => (field.startsWith("var.") ? "var." : field);
+
+function OperatorOptions({ field }: { field: string }) {
+  if (field === "tag")
+    return (
+      <>
+        <option value="equals">Has this tag</option>
+        <option value="not_equals">Does not have this tag</option>
+        <option value="exists">Has any tag</option>
+      </>
+    );
+  if (field === "replied")
+    return (
+      <>
+        <option value="equals">Is</option>
+      </>
+    );
+  return (
+    <>
+      <option value="equals">Equals</option>
+      <option value="not_equals">Does not equal</option>
+      <option value="contains">Contains</option>
+      <option value="not_contains">Does not contain</option>
+      <option value="greater">Greater than</option>
+      <option value="less">Less than</option>
+      <option value="exists">Is set</option>
+      <option value="not_exists">Is empty</option>
+    </>
+  );
+}
+
+// A compact field / test / value row, for exit goals.
+function ConditionFields({
+  field,
+  operator,
+  value,
+  customFields,
+  onChange,
+}: {
+  field: string;
+  operator: string;
+  value: string;
+  customFields: CustomField[];
+  onChange: (p: Partial<ExitGoal>) => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-wrap gap-2">
+      <select className="input w-44" value={fieldSelectValue(field)} onChange={(e) => onChange({ field: e.target.value, value: e.target.value === "replied" ? "yes" : value })}>
+        <FieldOptions customFields={customFields} />
+      </select>
+      {field.startsWith("var.") && (
+        <input className="input w-32 font-mono text-xs" placeholder="field_name" value={field.slice(4)} onChange={(e) => onChange({ field: "var." + e.target.value.trim() })} />
+      )}
+      <select className="input w-40" value={operator || "equals"} onChange={(e) => onChange({ operator: e.target.value })}>
+        <OperatorOptions field={field} />
+      </select>
+      {field === "replied" ? (
+        <select className="input w-32" value={value || "yes"} onChange={(e) => onChange({ value: e.target.value })}>
+          <option value="yes">Replied</option>
+          <option value="no">Did not reply</option>
+        </select>
+      ) : !["exists", "not_exists"].includes(operator) ? (
+        <input className="input w-36" placeholder={field === "tag" ? "e.g. Purchased" : "Value"} value={value} onChange={(e) => onChange({ value: e.target.value })} />
+      ) : null}
+    </div>
+  );
+}
+
+// Every save of this workflow, with a way back to any of them.
+function VersionsDrawer({
+  workflowId,
+  current,
+  dirty,
+  onRestored,
+  onClose,
+}: {
+  workflowId: string;
+  current: number;
+  dirty: boolean;
+  onRestored: (w: Workflow) => void;
+  onClose: () => void;
+}) {
+  const [versions, setVersions] = useState<WorkflowVersion[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api<WorkflowVersion[]>(`/workflows/${workflowId}/versions`)
+      .then(setVersions)
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load the history"));
+  }, [workflowId]);
+
+  async function restore(v: number) {
+    const msg = dirty
+      ? `Restore version ${v}? Your unsaved changes will be lost.`
+      : `Restore version ${v}? It becomes the newest version; nothing is deleted.`;
+    if (!confirm(msg)) return;
+    try {
+      onRestored(await api<Workflow>(`/workflows/${workflowId}/versions/${v}/restore`, { method: "POST" }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not restore");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
+      <aside onClick={(e) => e.stopPropagation()} className="ark-pop h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-[var(--ark-shadow-overlay)]">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Version history</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded p-1 text-slate-400 hover:bg-slate-100">✕</button>
+        </div>
+        <p className="mb-3 text-sm text-slate-500">Every save is kept. Restoring makes an old version the newest; contacts waiting in a live workflow continue on it.</p>
+        {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+        {!versions && !error && <p className="text-sm text-slate-500">Loading…</p>}
+        {versions?.length === 0 && <p className="text-sm text-slate-500">No saved versions yet.</p>}
+        <ul className="divide-y divide-slate-100">
+          {versions?.map((v) => (
+            <li key={v._id} className="flex items-center gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  Version {v.version} {v.version === current && <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">current</span>}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {new Date(v.savedAt).toLocaleString()} · {v.savedBy || "someone"} · {countSteps(v.steps ?? [])} steps · {v.status === "published" ? "live" : v.status}
+                </p>
+              </div>
+              {v.version !== current && (
+                <button onClick={() => restore(v.version)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">Restore</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </div>
+  );
+}
+
+const MAP_TARGETS = [
+  ["", "Automatic"],
+  ["name", "Name"],
+  ["email", "Email"],
+  ["phone", "Phone"],
+  ["value", "Deal value"],
+  ["tags", "Tags"],
+  ["skip", "Don't save"],
+];
+
+/*
+Step 2 and 3 of setting up a webhook: send a test, see every field that
+arrived, and say where each one goes. Every field is also a variable,
+{{variables.key}}, whatever it is mapped to.
+*/
+function WebhookMapping({
+  workflowId,
+  url,
+  mapping,
+  customFields,
+  onMapping,
+}: {
+  workflowId: string;
+  url?: string;
+  mapping: Record<string, string>;
+  customFields: CustomField[];
+  onMapping: (m: Record<string, string>) => void;
+}) {
+  const [capture, setCapture] = useState<WebhookCapture | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function check() {
+    setChecking(true);
+    try {
+      setCapture(await api<WebhookCapture>(`/workflows/${workflowId}/capture`));
+    } catch {
+      setCapture({ fields: [] });
+    } finally {
+      setChecking(false);
+    }
+  }
+  useEffect(() => {
+    api<WebhookCapture>(`/workflows/${workflowId}/capture`).then(setCapture).catch(() => setCapture({ fields: [] }));
+  }, [workflowId]);
+
+  const varKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const curl = url
+    ? `curl -X POST "${url}" -H "Content-Type: application/json" -d '{"name":"Test Lead","email":"test@example.com","phone":"9876543210","city":"Pune"}'`
+    : "";
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-medium">Fields received</p>
+        <button onClick={check} disabled={checking} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">
+          {checking ? "Checking…" : "Check for a test"}
+        </button>
+      </div>
+      {!capture || capture.fields.length === 0 ? (
+        <div className="space-y-2 text-xs text-slate-600">
+          <p>Send one test call to the address above (a draft workflow just records it), then press Check for a test.</p>
+          {curl && (
+            <pre className="overflow-x-auto rounded bg-slate-50 p-2 text-[11px] whitespace-pre-wrap break-all">{curl}</pre>
+          )}
+        </div>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-slate-500">
+            Last test {capture.receivedAt ? new Date(capture.receivedAt).toLocaleString() : ""}. Choose where each field goes; Automatic recognises name, email and phone by their usual names.
+          </p>
+          <ul className="space-y-1.5">
+            {capture.fields.map((f) => (
+              <li key={f.key} className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs">{f.key}</p>
+                  <p className="truncate text-xs text-slate-500" title={f.value}>
+                    {f.value || "(empty)"} · <span className="font-mono">{`{{variables.${varKey(f.key)}}}`}</span>
+                  </p>
+                </div>
+                <select
+                  className="input w-36 py-1 text-xs"
+                  value={mapping[f.key] ?? ""}
+                  onChange={(e) => {
+                    const next = { ...mapping };
+                    if (e.target.value) next[f.key] = e.target.value;
+                    else delete next[f.key];
+                    onMapping(next);
+                  }}
+                >
+                  {MAP_TARGETS.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                  {customFields.length > 0 && (
+                    <optgroup label="Custom field">
+                      {customFields.map((cf) => (
+                        <option key={cf.key} value={`custom:${cf.key}`}>{cf.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </li>
+            ))}
+          </ul>
+          {customFields.length === 0 && (
+            <p className="mt-2 text-xs text-slate-500">
+              To keep a field like City on the contact, add it in{" "}
+              <Link href="/settings/fields" className="underline">Settings → Custom Fields</Link>.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 
 // WabaTemplatePicker loads the tenant's WhatsApp templates and lets the step
 // choose an APPROVED one — cold WhatsApp sends must use an approved template.
 function WabaTemplatePicker({
   templateId,
+  variables,
+  customFields,
   onSelect,
+  onVariables,
 }: {
   templateId: string;
+  variables: string[];
+  customFields: CustomField[];
   onSelect: (id: string, name: string, language: string) => void;
+  onVariables: (v: string[]) => void;
 }) {
   const [all, setAll] = useState<WabaTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2191,10 +2773,100 @@ function WabaTemplatePicker({
           </option>
         ))}
       </select>
-      <p className="mt-1 text-xs text-slate-400">
-        Sent to the contact&apos;s phone. Variables are filled from the contact automatically.
-      </p>
+      <WabaVariables
+        template={approved.find((t) => t._id === templateId)}
+        variables={variables}
+        customFields={customFields}
+        onVariables={onVariables}
+      />
     </Field>
+  );
+}
+
+const SAMPLE_CONTACT: Record<string, string> = { name: "Asha Rao", email: "asha@example.com", phone: "+91 98765 43210", pipelineName: "Sales" };
+
+/*
+Fill each {{1}}, {{2}}... of the template, with a preview of the message as a
+contact would see it. A slot left on "Template default" uses the mapping saved
+on the template itself.
+*/
+function WabaVariables({
+  template,
+  variables,
+  customFields,
+  onVariables,
+}: {
+  template?: WabaTemplate;
+  variables: string[];
+  customFields: CustomField[];
+  onVariables: (v: string[]) => void;
+}) {
+  if (!template) return null;
+  const count = Math.max(0, ...Array.from(template.body.matchAll(/\{\{\s*(\d+)\s*\}\}/g), (m) => Number(m[1])));
+  const slot = (i: number) => variables[i] ?? "";
+  const setSlot = (i: number, v: string) => {
+    const next = Array.from({ length: count }, (_, j) => slot(j));
+    next[i] = v;
+    onVariables(next);
+  };
+  const sample = (src: string, i: number) => {
+    const cut = src.indexOf(":");
+    const kind = cut < 0 ? src : src.slice(0, cut);
+    const arg = cut < 0 ? "" : src.slice(cut + 1);
+    if (kind === "text") return arg || `value ${i + 1}`;
+    if (kind === "custom") return `[${customFields.find((f) => f.key === arg)?.label ?? arg}]`;
+    if (kind === "var") return `[${arg || "webhook field"}]`;
+    return SAMPLE_CONTACT[kind] ?? template.variableSamples?.[i] ?? `value ${i + 1}`;
+  };
+  const preview = template.body.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, n) => sample(slot(Number(n) - 1), Number(n) - 1));
+
+  return (
+    <div className="mt-3 space-y-2">
+      {count > 0 && <p className="text-sm font-medium">Fill the variables</p>}
+      {Array.from({ length: count }, (_, i) => {
+        const src = slot(i);
+        const kind = src.split(":")[0];
+        return (
+          <div key={i} className="grid grid-cols-[auto_1fr] items-center gap-2">
+            <span className="w-10 font-mono text-xs text-slate-500">{`{{${i + 1}}}`}</span>
+            <div className="flex gap-1.5">
+              <select
+                className="input py-1 text-xs"
+                value={kind === "custom" || kind === "var" || kind === "text" ? (kind === "custom" ? src : kind) : src}
+                onChange={(e) => setSlot(i, e.target.value === "var" ? "var:" : e.target.value === "text" ? "text:" : e.target.value)}
+              >
+                <option value="">Template default</option>
+                <option value="name">Contact name</option>
+                <option value="phone">Contact phone</option>
+                <option value="email">Contact email</option>
+                <option value="pipelineName">Pipeline name</option>
+                {customFields.map((f) => (
+                  <option key={f.key} value={`custom:${f.key}`}>{f.label}</option>
+                ))}
+                <option value="var">Webhook field…</option>
+                <option value="text">Fixed text…</option>
+              </select>
+              {(kind === "var" || kind === "text") && (
+                <input
+                  className="input py-1 text-xs"
+                  placeholder={kind === "var" ? "field name, e.g. city" : "Text"}
+                  value={src.slice(kind.length + 1)}
+                  onChange={(e) => setSlot(i, `${kind}:${e.target.value}`)}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div className="rounded-xl bg-[#e7ddd3] p-3 dark:bg-slate-800">
+        <div className="max-w-[90%] rounded-lg rounded-tl-none bg-white px-3 py-2 text-sm shadow-sm dark:bg-slate-700">
+          {template.headerType === "TEXT" && template.headerText && <p className="mb-1 font-semibold">{template.headerText}</p>}
+          <p className="whitespace-pre-wrap">{preview}</p>
+          {template.footer && <p className="mt-1 text-xs text-slate-400">{template.footer}</p>}
+        </div>
+        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300">Preview with a sample contact. Sent to the contact&apos;s phone.</p>
+      </div>
+    </div>
   );
 }
 
@@ -2220,10 +2892,22 @@ function summaryFor(step: WorkflowStep, templates: EmailTemplate[]): string {
     case "update_field":
       return s("field") ? `${s("field")} = ${s("value")}` : "";
     case "if_else":
-      return s("field") ? `${s("field")} ${s("operator") || "equals"} ${s("value")}`.trim() : "";
+    case "filter":
+    case "goal_exit":
+      if (s("field") === "replied") return s("value") === "no" ? "did not reply" : "replied on WhatsApp";
+      return s("field") ? `${s("field").replace(/^custom\.|^var\./, "")} ${(s("operator") || "equals").replace("_", " ")} ${s("value")}`.trim() : "";
+    case "end_workflow":
+      return "ends the run";
+    case "waba_window":
+      return "messaged in the last 24h?";
+    case "wait_reply":
+      return `up to ${s("timeoutHours") || "24"} hours`;
     default:
       // Delay/timing steps store amount + unit.
-      if (s("amount") && s("unit")) return durationLabel(s("amount"), s("unit"));
+      if (s("amount") && s("unit")) {
+        const d = durationLabel(s("amount"), s("unit"));
+        return s("windowStart") ? `${d}, then ${s("windowStart")}–${s("windowEnd")}` : d;
+      }
       return s("notes") ? "configured" : "";
   }
 }

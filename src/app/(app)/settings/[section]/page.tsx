@@ -7,6 +7,7 @@ import { tileFor } from "@/lib/settings";
 import { AppStore } from "@/components/settings/AppStore";
 import { StaffManager } from "@/components/settings/StaffManager";
 import { DomainManager } from "@/components/settings/DomainManager";
+import { CustomFieldsManager } from "@/components/settings/CustomFieldsManager";
 
 export default function SettingsSectionPage() {
   const params = useParams<{ section: string }>();
@@ -34,6 +35,8 @@ export default function SettingsSectionPage() {
         <StaffManager />
       ) : params.section === "domains" ? (
         <DomainManager />
+      ) : params.section === "fields" ? (
+        <CustomFieldsManager />
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
           <p className="text-base font-semibold">{tile?.title ?? "This section"}</p>
